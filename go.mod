@@ -78,9 +78,11 @@ require (
 	github.com/armon/go-metrics v0.4.1 // indirect
 	github.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2 // indirect
 	github.com/blang/semver v3.5.1+incompatible // indirect
+	github.com/cespare/reflex v0.3.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/cncf/xds/go v0.0.0-20250501225837-2ac532fd4443 // indirect
 	github.com/coreos/go-oidc/v3 v3.16.0 // indirect
+	github.com/creack/pty v1.1.11 // indirect
 	github.com/cyberphone/json-canonicalization v0.0.0-20241213102144-19d51d7fe467 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/digitorus/pkcs7 v0.0.0-20250730155240-ffadbf3f398c // indirect
@@ -139,6 +141,7 @@ require (
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/jedisct1/go-minisign v0.0.0-20241212093149-d2f9f49435c7 // indirect
+	github.com/kballard/go-shellquote v0.0.0-20180428030007-95032a82bc51 // indirect
 	github.com/labstack/gommon v0.4.2 // indirect
 	github.com/letsencrypt/boulder v0.20251003.0 // indirect
 	github.com/lib/pq v1.10.9 // indirect
@@ -147,6 +150,7 @@ require (
 	github.com/mfridman/interpolate v0.0.2 // indirect
 	github.com/miekg/dns v1.1.68 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
+	github.com/ogier/pflag v0.0.1 // indirect
 	github.com/oklog/ulid v1.3.1 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
@@ -203,4 +207,9 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20251014184007-4626949a642f // indirect
 	google.golang.org/grpc v1.76.0 // indirect
 	k8s.io/klog/v2 v2.130.1 // indirect
+)
+
+tool (
+	github.com/cespare/reflex
+	github.com/magefile/mage
 )
