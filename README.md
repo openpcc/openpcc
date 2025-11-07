@@ -45,7 +45,7 @@ func makePCCRequest() error {
 
     cfg := openpcc.DefaultConfig()
     cfg.APIURL = "https://app.confident.security"
-    cfg.APIKey = "{Your API Key here}" //Read from ENVIRONMENT VAR (STRONGLY RECOMMEND)
+    cfg.APIKey = os.Getenv("<APIKEY_ENV_VAR_NAME>")
     cfg.TransparencyVerifier = transparency.DefaultVerifierConfig()
     cfg.TransparencyIdentityPolicy = &identityPolicy
 
