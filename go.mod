@@ -2,6 +2,7 @@ module github.com/openpcc/openpcc
 
 go 1.25.1
 
+
 require (
 	github.com/MicahParks/jwkset v0.11.0
 	github.com/allaboutapps/integresql-client-go v1.0.0
@@ -10,10 +11,10 @@ require (
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/cenkalti/backoff/v5 v5.0.3
 	github.com/cloudflare/circl v1.6.1
-	github.com/confidentsecurity/bhttp v0.0.8
+	github.com/confidentsecurity/bhttp v0.0.9
 	github.com/confidentsecurity/go-nvtrust v0.2.1
-	github.com/confidentsecurity/ohttp v0.0.8
-	github.com/confidentsecurity/twoway v0.0.8
+	github.com/confidentsecurity/ohttp v0.0.9
+	github.com/confidentsecurity/twoway v0.0.9
 	github.com/exaring/otelpgx v0.9.3
 	github.com/fatih/color v1.18.0
 	github.com/go-openapi/runtime v0.29.0

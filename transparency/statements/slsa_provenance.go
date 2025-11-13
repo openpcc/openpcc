@@ -86,8 +86,7 @@ func sanitizeSLSA02Predicate(predicate map[string]any) {
 		return
 	}
 
-	// replace sensitive fields in the invocation.environment map.
-
+	// 
 	// can contain detailed PR information, title, description, comments etc.
 	environment["github_event_payload"] = map[string]any{}
 

@@ -761,14 +761,8 @@ github.com/cncf/xds/go v0.0.0-20250501225837-2ac532fd4443 h1:aQ3y1lwWyqYPiWZThqv
 github.com/cncf/xds/go v0.0.0-20250501225837-2ac532fd4443/go.mod h1:W+zGtBO5Y1IgJhy4+A9GOqVhqLpfZi+vwmdNXUehLA8=
 github.com/codahale/rfc6979 v0.0.0-20141003034818-6a90f24967eb h1:EDmT6Q9Zs+SbUoc7Ik9EfrFqcylYqgPZ9ANSbTAntnE=
 github.com/codahale/rfc6979 v0.0.0-20141003034818-6a90f24967eb/go.mod h1:ZjrT6AXHbDs86ZSdt/osfBi5qfexBrKUdONk989Wnk4=
-github.com/confidentsecurity/bhttp v0.0.8 h1:rgqSSHMyaRSx6yN14FL0KtitlFvH49GTfKCZ7UpJdo4=
-github.com/confidentsecurity/bhttp v0.0.8/go.mod h1:NrzuPh7/VKrWQjIaQ/8eMeeFshQBKzp4yX12d20eFpk=
 github.com/confidentsecurity/go-nvtrust v0.2.1 h1:JFuiBHIcnh/nrNTGAAWRtqkZ5YYCDNP8UtbvOVt4hBg=
 github.com/confidentsecurity/go-nvtrust v0.2.1/go.mod h1:f0C83RCmNBwL0vT8bVZ/+sQYVAbjwLSsw5GuA/AYi2c=
-github.com/confidentsecurity/ohttp v0.0.8 h1:Pa/PZnPXkVyG9RULWSwPjlOyVtY98EQrM6lfOQmQwdM=
-github.com/confidentsecurity/ohttp v0.0.8/go.mod h1:bpdgdHQO73QTjJpIy1QYvu4bpTd5sD8nydme2I5Mcz4=
-github.com/confidentsecurity/twoway v0.0.8 h1:4BZ3Bk/cSXEagczIl0vZNW4EmeejfcYBOxbI/om14rI=
-github.com/confidentsecurity/twoway v0.0.8/go.mod h1:ggViao8GlQ/IMq2hgOqdZAqrfwanGZOjuwyh0xyuW/E=
 github.com/coreos/go-oidc/v3 v3.16.0 h1:qRQUCFstKpXwmEjDQTIbyY/5jF00+asXzSkmkoa/mow=
 github.com/coreos/go-oidc/v3 v3.16.0/go.mod h1:wqPbKFrVnE90vty060SB40FCJ8fTHTxSwyXJqZH+sI8=
 github.com/cpuguy83/go-md2man/v2 v2.0.6/go.mod h1:oOW0eioCTA6cOiMLiUPZOpcVxMig6NIQQ7OS05n1F4g=
