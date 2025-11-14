@@ -1176,6 +1176,7 @@ func validNormalizedHost(r *http.Request) (string, error) {
 
 func GetPromptPaths() []string {
 	return []string{
+		// TODO: remove /api/generate and /api/chat once we move OpenPCC to vLLM
 		"/api/generate",
 		"/api/chat",
 		"/v1/completions",
