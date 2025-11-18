@@ -565,6 +565,25 @@ func (c *Client) SetDefaultModel(model string) error {
 	return c.setDefaultNodeTagsUnsafe(tagsSlice)
 }
 
+func (c *Client) GetDefaultModel() (string, error) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	reqTags, err := tags.FromSlice(c.params.NodeTags)
+	if err != nil {
+		return "", err
+	}
+
+	modelTags := reqTags.GetValues("model")
+	if len(modelTags) > 1 {
+		return "", fmt.Errorf("expected one or fewer model tags, got %d", len(modelTags))
+	} else if len(modelTags) == 0 {
+		return "", nil
+	}
+
+	return modelTags[0], nil
+}
+
 func (c *Client) GetModels(ctx context.Context) ([]string, error) {
 	badge, err := c.nodeFinder.GetBadge(ctx)
 	if err != nil {
