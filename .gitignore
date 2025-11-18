@@ -1,0 +1,2 @@
+# ignore sigstore local trusted root cache
+.sigstore-cache
