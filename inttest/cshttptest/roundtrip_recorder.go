@@ -125,16 +125,25 @@ func (r *RoundTripRecorder) Recordings() []RoundTripRecording {
 }
 
 func (r *RoundTripRecorder) beginRecording(rec *RoundTripRecording, conn net.Conn) net.Conn {
-	return &recordedConn{
+	recordedConn := &recordedConn{
 		Conn: conn,
 		mu:   &sync.Mutex{},
 		rec:  rec,
-		doneFunc: func() {
-			r.mu.Lock()
-			defer r.mu.Unlock()
-			r.recordings = append(r.recordings, *rec)
-		},
 	}
+
+	recordedConn.doneFunc = func() {
+		// First acquire the recordedConn's mutex to safely read rec
+		recordedConn.mu.Lock()
+		recCopy := *rec
+		recordedConn.mu.Unlock()
+
+		// Then acquire the RoundTripRecorder's mutex to append
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		r.recordings = append(r.recordings, recCopy)
+	}
+
+	return recordedConn
 }
 
 type RoundTripRecording struct {
