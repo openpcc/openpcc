@@ -30,9 +30,9 @@ require (
 	github.com/labstack/echo/v4 v4.13.4
 	github.com/magefile/mage v1.15.0
 	github.com/neilotoole/slogt v1.1.0
-	github.com/openpcc/bhttp v0.0.22
-	github.com/openpcc/ohttp v0.0.22
-	github.com/openpcc/twoway v0.0.22
+	github.com/openpcc/bhttp v0.0.35
+	github.com/openpcc/ohttp v0.0.35
+	github.com/openpcc/twoway v0.0.35
 	github.com/pkg/errors v0.9.1
 	github.com/pressly/goose/v3 v3.26.0
 	github.com/quic-go/quic-go v0.56.0

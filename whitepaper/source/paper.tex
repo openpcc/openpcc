@@ -2,6 +2,12 @@
 \usepackage{paper}
 \usepackage{pdfpages}
 \usepackage{parskip}
+\usepackage{eso-pic}
+\usepackage{tikz}
+\usetikzlibrary{calc} % For coordinate calculations
+\usepackage{tabularx}
+\usepackage{lscape}
+\usepackage{longtable}
 \bibliographystyle{paper}
 
 % \usepackage{background}
@@ -11,15 +17,19 @@
 % \SetBgContents{\rule{.4pt}{\paperheight}}
 % \SetBgHshift{-9cm}
 
-\usepackage{eso-pic}
-\usepackage{tikz}
-\usetikzlibrary{calc} % For coordinate calculations
-
 \usepackage[dvipsnames]{xcolor}
 
 \definecolor{confsec_orange}{RGB}{249, 171, 68}
 \definecolor{confsec_middle}{RGB}{201, 86, 68}
 \definecolor{confsec_red}{RGB}{201, 51, 51}
+
+\makeatletter
+\newcommand*{\centerfloat}{%
+  \parindent \z@
+  \leftskip \z@ \@plus 1fil \@minus \textwidth
+  \rightskip\leftskip
+  \parfillskip \z@skip}
+\makeatother
 
 \AddToShipoutPicture{%
     \AtPageLowerLeft{%
@@ -52,9 +62,6 @@
   \end{figure}
 }
 
-
-
-
 % Enter paper title to populate PDF metadata:
 \hypersetup{pdftitle={OpenPCC Technical Whitepaper}}
 
@@ -73,11 +80,7 @@
 \title{OpenPCC}
 
 % Enter authors:
-\author{Confident Security Technical Staff
-%
-% Enter affiliations and acknowledgements:
-% \thanks{Full contributor list TODO}
-}
+\author{Confident Security Technical Staff\thanks{Special thanks to contributors André Arko, Valeriy Burlaka, George J. Danforth, Elizabeth Eady, Mark Ferlatte, Adam Fletcher, Steve Greene, Vadim Gribanov, Nick Halt, Ben Johnson, Alexi Kostibas, Cory LaNou, MacRae Linton, T. Lisanti, Robin Message, Jonathan Mortensen, Kenneth Salt, Willem Schots, and Mateusz Walkiewicz.}}
 
 % Enter date:
 \date{November 2025}
@@ -87,7 +90,6 @@
 
 \begin{titlepage}
 \maketitle
-
 This paper introduces OpenPCC, a security and privacy standard for
 providing provably-confidential cloud compute to clients. Designed for
 multi-modal AI models and other inference engines, OpenPCC describes a
@@ -95,11 +97,8 @@ system for inference on private or otherwise sensitive data such that
 inputs and outputs remain completely hidden from all participants. The
 standard also specifies an anonymization scheme to protect the privacy
 of customers from side-channel leaks, including API timing, payment side
-channels, and metadata analysis.
-\href{http://github.com/openpcc/openpcc}{\emph{\ul{A fully-featured
-Apache 2.0 open-source implementation written in Go}}
-\emph{\ul{accompanies this document.}}}
-
+channels, and metadata analysis. \href{http://github.com/openpcc/openpcc}{\emph{A fully-featured
+Apache 2.0 open-source implementation written in Go accompanies this document.}}
 \end{titlepage}
 
 % Enter main text:
@@ -118,29 +117,28 @@ amplify them dramatically. These risks are no longer hypothetical:
 \begin{itemize}
 \item
   A 2025
-  \href{https://go.layerxsecurity.com/hubfs/LayerX_Enterprise_AI_and_SaaS_Data_Security_Report.pdf}{\ul{survey}}
+  \href{https://go.layerxsecurity.com/hubfs/LayerX_Enterprise_AI_and_SaaS_Data_Security_Report.pdf}{survey}
   found that in enterprise environments, 40\% of files uploaded into
   GenAI tools contain PII or PCI data, and 45\% of all employees are
   using GenAI tools.
 \item
   Anthropic
-  \href{https://www.anthropic.com/news/updates-to-our-consumer-terms}{\ul{recently
-  began defaulting}} to including all user-submitted data in training.
+  \href{https://www.anthropic.com/news/updates-to-our-consumer-terms}{recently
+  began defaulting} to including all user-submitted data in training.
   On major AI providers today, users must opt-out of data training
   rather than a more user-friendly opt-in.
 \item
-  \href{https://www.bbc.com/news/articles/c0573lj172jo}{\ul{Meta}},
-  \href{https://www.bbc.com/news/articles/cdrkmk00jy0o}{\ul{Grok}},
-  \href{https://www.forbes.com/sites/iainmartin/2025/09/08/hundreds-of-anthropic-chatbot-transcripts-showed-up-in-google-search/}{\ul{Anthropic}},
+  \href{https://www.bbc.com/news/articles/c0573lj172jo}{Meta},
+  \href{https://www.bbc.com/news/articles/cdrkmk00jy0o}{Grok},
+  \href{https://www.forbes.com/sites/iainmartin/2025/09/08/hundreds-of-anthropic-chatbot-transcripts-showed-up-in-google-search/}{Anthropic},
   and
-  \href{https://techcrunch.com/2025/07/31/your-public-chatgpt-queries-are-getting-indexed-by-google-and-other-search-engines/}{\ul{OpenAI}}
+  \href{https://techcrunch.com/2025/07/31/your-public-chatgpt-queries-are-getting-indexed-by-google-and-other-search-engines/}{OpenAI}
   have all suffered leaks that exposed hundreds of thousands of very
   confidential chat logs to the public Internet, and search engines
   subsequently indexed them.
 \item
   In an
-  \href{https://arstechnica.com/tech-policy/2025/06/openai-says-court-forcing-it-to-save-all-chatgpt-logs-is-a-privacy-nightmare/}{\ul{extremely
-  high-profile case}}, OpenAI was legally forced to retain ``deleted''
+  \href{https://arstechnica.com/tech-policy/2025/06/openai-says-court-forcing-it-to-save-all-chatgpt-logs-is-a-privacy-nightmare/}{extremely high-profile case}, OpenAI was legally forced to retain ``deleted''
   and ``temporary'' prompts and responses by a judge, violating user
   expectations and revealing the capability is indeed possible -- the
   servers retain private prompt data. In this instance, two parties were
@@ -189,18 +187,8 @@ Each party has varying degrees of trust in the others, and any breach by
 one compromises them all. Note that their incentives are misaligned, but
 they will all feel the consequences of a data breach!
 
-Approaches to AI data privacy often rely on shifting trust among the
-parties mentioned above. But so far, these methods have consistently
-fallen short. Contractual promises will be broken, redaction and
-obfuscation are incomplete and prone to leaks, and
-self-hosting/on-premise is prohibitively expensive given the high cost
-of AI hardware and the power to run them. Even then, proprietary models often remain
-inaccessible. The only approach that truly addresses all of these
-challenges is a combination of full anonymization and full encryption.
-To guarantee user prompts and responses cannot be subpoenaed, stolen,
-used for training, or leaked, they must not be stored at all. To
-guarantee users and their data cannot be identified or targeted, they
-must remain anonymous.
+Approaches to AI data privacy often rely on shifting trust among the parties mentioned above. But so far, these methods have consistently
+fallen short. Contractual promises will be broken, redaction and obfuscation are incomplete and prone to leaks, and self-hosting/on-premise is prohibitively expensive given the high cost of AI hardware and the power to run them. Even then, proprietary models often remain inaccessible. The only approach that truly addresses all of these challenges is a combination of full anonymization and full encryption. To guarantee user prompts and responses cannot be subpoenaed, stolen, used for training, or leaked, they must not be stored at all. To guarantee users and their data cannot be identified or targeted, they must remain anonymous.
 
 \jmofigure{media/image11.png}{Legacy Inference Providers}
 
@@ -231,8 +219,8 @@ component that decrypts inference prompts and evaluates them using the
 inference engine selected by the client.
 
 OpenPCC is inspired by, extends, and improves upon
-\href{https://security.apple.com/blog/private-cloud-compute/}{\ul{Apple
-Inc.'s PCC architecture}}, incorporating a mechanism for anonymized
+\href{https://security.apple.com/blog/private-cloud-compute/}{Apple
+Inc.'s PCC architecture}, incorporating a mechanism for anonymized
 usage tracking while protecting the privacy of customers from
 side-channel leaks, including API timing, payment side channels, and
 data metadata analysis, to ensure provably and verifiably private
@@ -269,7 +257,7 @@ differences are a consequence of 4 practical requirements:
   Prompt decryption must fail if the evidence at time of decryption does
   not match the evidence at time of collection. This is a generalization
   of solving a
-  \href{https://en.wikipedia.org/wiki/Time-of-check_to_time-of-use}{\ul{TOCTOU}}
+  \href{https://en.wikipedia.org/wiki/Time-of-check_to_time-of-use}{TOCTOU}
   security flaw. Here, we consider time of evidence collection, time of
   evidence verification (TOC), time of request encryption, and time of
   decryption followed by workload execution (TOU).
@@ -428,10 +416,10 @@ system lists in a public transparency log.
 With those goals in mind, let's begin to examine the specific components
 of the OpenPCC standard. OpenPCC uses many IETF standards and
 publications, including HTTP
-(\href{https://datatracker.ietf.org/doc/html/rfc2616}{\ul{RFC 2616}}),
-Oblivious HTTP (\href{https://datatracker.ietf.org/doc/rfc9458/}{\ul{RFC
-9458}}), Remote Attestation Procedures (RATS) Architecture
-(\href{https://www.ietf.org/rfc/rfc9334.html}{\ul{RFC 9334}}), as well
+(\href{https://datatracker.ietf.org/doc/html/rfc2616}{RFC 2616}),
+Oblivious HTTP (\href{https://datatracker.ietf.org/doc/rfc9458/}{RFC
+9458}), Remote Attestation Procedures (RATS) Architecture
+(\href{https://www.ietf.org/rfc/rfc9334.html}{RFC 9334}), as well
 as many others. We reference them where possible and implementers SHOULD
 be familiar with them.
 
@@ -587,9 +575,9 @@ their transactions by adding random delays between payments.
 HTTP}\label{private-network-requests-via-oblivious-http}
 
 OpenPCC uses
-\href{https://datatracker.ietf.org/doc/rfc9458/}{\ul{Oblivious HTTP}},
-described in \href{https://datatracker.ietf.org/doc/rfc9458/}{\ul{RFC
-9458}}, to anonymize all network traffic between the client and OpenPCC
+\href{https://datatracker.ietf.org/doc/rfc9458/}{Oblivious HTTP},
+described in \href{https://datatracker.ietf.org/doc/rfc9458/}{RFC
+9458}, to anonymize all network traffic between the client and OpenPCC
 services other than AuthBank. OHTTP prevents OSI Layer 1-4 metadata from
 revealing any association between an API call and a real user identity.
 
@@ -616,9 +604,9 @@ and so de-anonymization of OHTTP traffic is only feasible by
 compromising both the recipient's managed services and the third party
 OHTTP relay infrastructure. As of the initial release of OpenPCC,
 available OHTTP relay providers include
-\href{https://fastly.com}{\ul{Fastly}},
-\href{https://cloudflare.com}{\ul{Cloudflare}}, and
-\href{https://oblivious.network}{\ul{Oblivious.network}}.
+\href{https://fastly.com}{Fastly},
+\href{https://cloudflare.com}{Cloudflare}, and
+\href{https://oblivious.network}{Oblivious.network}.
 
 \subsubsection{\texorpdfstring{End-to-End Encryption
 }{End-to-End Encryption }}\label{end-to-end-encryption}
@@ -685,7 +673,7 @@ OpenPCC maintains a centralized record of used nonces to track when
 users redeem Credits. The limited lifespan prevents the system from
 having to store all nonces indefinitely. Each Credit represents its
 value as a floating-point number within the range 0 to 33,285,996,544
-(31 × 2³⁰), and can express any number in this range with no more than
+(31 × 2\textsuperscript{30}), and can express any number in this range with no more than
 6.25\% relative error.
 
 In a standard blind signature process, the signer remains unaware of the
@@ -1439,17 +1427,7 @@ invalidated attestation bundles, an OpenPCC Client and ComputeNode
 leverage TPM mechanisms, including TPM Policy sessions, to expire
 passports safely and securely.
 
-% Figure 11. Secure Hardware Elements for Compute Attestation
-
-% TODO: Integrate this into a caption?
-
-
-% \includegraphics[width=6.5in,height=5.75in]{media/image7.jpg}
-\jmofigure{media/image7.jpg}{Secure Hardware Elements for Compute Attestation \\ \\ Trust domains are shown as rounded rectangles, including the TPM, TEE,
-and third party sources of trust. Dashed red arrows denote that an
-artifact is attested to by the dependent component. Dashed black arrows
-indicate secure hardware element connections. Solid green arrows denote
-composition in an attestation evidence type.}
+\jmofigure{media/image7.jpg}{Secure Hardware Elements for Compute Attestation\newline\newline{\small Trust domains are shown as rounded rectangles, including the TPM, TEE, and third party sources of trust. Dashed red arrows denote that an artifact is attested to by the dependent component. Dashed black arrows indicate secure hardware element connections. Solid green arrows denote composition in an attestation evidence type.}}
 
 \paragraph{Roots of Trust}\label{roots-of-trust}
 
@@ -1518,10 +1496,40 @@ signed by one or more of the following keys:
 To produce a valid result, any attestation must include the following
 evidence bundles.
 
-% Table 1. Minimal Evidence Required for Valid Attestation Results
-\jmotable{tables/table1.png}{Table 1. Minimal Evidence Required for Valid Attestation Results}
+% Please add the following required packages to your document preamble:
+% \usepackage{multirow}
+\begin{table}[]
+\centerfloat
+\caption{Minimal Evidence Required for Valid Attestation Results}
+\label{evidence}
+\begin{tabularx}{7.5in}{|X|X|p{0.7\textwidth}|} \hline
 
-\jmofigure{media/beast2.png}{}
+\textbf{Evidence Of} & \textbf{Bundle Name(s)} & \textbf{Bundle Description} \\ \hline
+
+REK presence in the TPM & CerifyRekCreation & {\small Certifies that the Request Encryption Key (REK), generated when the ComputeNode instance boots and initializes the TPM, is bound to the compute instance's TPM and signed by the Attestation Key (AK) resident on the TPM} \\
+
+& TpmtPublic & {\small Attests the presence of an arbitrary TPM public key for the provided TPM. OpenPCC requires the use of this evidence type to certify the exclusive presence of keys on the TPM.} \\ \hline
+
+\multirow{3}{1.5in}{Endorsement of the REK on the TPM, using the TPM’s AK (only one is required)} & AkTpmtPublic & {\small Used for bare-metal VMs, where cloud-provided AKs are not available. Allows a client to verify the endorsement hierarchy of the AK generated within an implementation of the Secure VM Service Module (SVSM).} \\
+& GceAkCertificate + \newline GceAkIntermediate-Certificate & {\small Certifies the AK present on the TPM on Google Cloud instances. Used in conjunction with GceAkIntermediateCertificate to attest to the complete AK certificate chain, up to the root-of-trust on the TPM.} \\
+& AzureAkCertificate & {\small For Azure cloud configurations, certifying the AK present on the TPM on Azure instances. Used to attest to the AK certificate chain.} \\ \hline
+
+\multirow{2}{1.5in}{Presence of a TEE (only one required)} & SevSnpReport + \newline SevSnpExtended-Report & {\small For AMD Secure Encrypted Virtualization Secure Nested Paging (SEV-SNP). Includes a nonce for the client, signed by the hardware root-of-trust. Verified by querying AMD's trust authority. ExtendedReport contains two fields for bare-metal instances. Check it was generated by SVSM and is equal to the ReportData field.} \\
+
+& TdxReport + \newline TdxCollateral & {\small For Intel environments, the Intel Trust Domain Extensions (TDX) attests to the TEE. With TdxCollateral, it attests to the full TDX environment up to the root of trust on the CPU.} \\ \hline
+
+Presence of a secure GPU & NvidiaEta + \newline NvdiaCCIntermediate-Certificate & {\small NVIDIA Confidential Computing environment using the NV Remote Attestation Service. This is used in conjunction with NvidiaCCIntermediateCertificate to attest to the full NVIDIA certificate chain. For the full flow, see Figure 12 below.} \\ \hline
+
+TPM PCR quote, signed by the TPM’s AK & TpmQuote & {\small This is a quote from the TPM's PCR bank, signed by the relevant AK. These values are cross-referenced with the content of the ImageSigstoreBundle evidence type to assert the correctness of the PCR bank and the integrity of the boot process for the compute image. For the full flow, see Figure 13 below.} \\ \hline
+
+UEFI event log, extended to the TPM PCRs & EventLog & {\small The complete UEFI bootloader event table, as recorded by the TPM and extended into the TPM's PCR bank. Hash chains for each relevant PCR are replayed to assert their correctness. Kernel command line, GUID Partition Table, and SecureBoot state attest the correctness of the hardened computing environment. Clients can validate against the transparency log.} \\ \hline
+
+ComputeNode image manifest, linked to a transparency log record & ImageSigstore-Bundle & {\small Includes the up-to-date content of the transparency log. The evidence enables cross-validation of the content of other evidence types, including the EventLog, TpmQuote (elaborated upon below), OpenPCC certificates, and every immutable partition in the compute image file system.} \\ \hline
+\end{tabularx}
+\end{table}
+
+
+\jmofigure{media/beast2.png}{TpmQuote Components for Validation}
 
 \subparagraph{\texorpdfstring{TpmQuote }{TpmQuote }}\label{tpmquote}
 
@@ -1674,8 +1682,27 @@ leaked key material for the secure elements, and implementers may use
 remote attestation mechanisms to process certificate revocations and
 updates.
 
-% Table 2. Supply Chain Threats and Remediations
-\jmotable{tables/table2.png}{Table 2. Supply Chain Threats and Remediations}
+\begin{longtable}[c]{|p{0.2\textwidth}|p{0.25\textwidth}|p{0.45\textwidth}|}
+\caption{Supply Chain Threats and Remediations}
+\label{supplychainthreats}\\
+\hline
+\textbf{Threat Scenario} &
+  \textbf{Details} &
+  \textbf{Mitigations \& Remediations} \\
+\endhead
+\hline
+{\small PKI compromise} &
+  {\small A root or intermediate certificate is compromised, enabling unauthorized issuance of certificates or signing of malicious code.} &
+  {\small OpenPCC requires the co-locality of a TPM 2.0 and TEE. Given a compromise in the certificate chain of either, a client should reference the remote attestation routines provided by the TEE, along with known-trusted values present in the transparency log to mitigate the risk of compound PKI failure. Include the Attestation Key (AK) and Endorsement Key (EK) used by the TPM in the transparency log.} \\
+\hline
+{\small Unpatchable hardware vulnerability} &
+  {\small An exploitable vulnerability exists in a read-only memory sector which can be exploited to access memory space or execute unauthorized code in an OpenPCC system.} &
+  {\small OpenPCC implementers should actively monitor for hardware-level vulnerabilities, with regular reviews of supply chain providers to ensure compliance with CVE advisories. An OpenPCC implementation should maintain transparency log records for hardware/firmware configurations, to be validated client-side before inference begins.} \\
+\hline
+{\small Software supply chain vulnerability or compromise} &
+  {\small A vulnerability or compromise in the software supply chain could lead to insertion of vulnerable or malicious code in the OpenPCC dependency chain.} &
+  {\small OpenPCC implementers should utilize offline patching, freezing of system dependencies, regular updates, and re-deployments to mitigate short-lived supply chain compromises.} \\ \hline
+\end{longtable}
 
 \subsubsection{Platform Providers}\label{platform-providers}
 
@@ -1689,8 +1716,23 @@ through a cloud provider's TPM, SecureBoot, or TEE are considered
 explicitly trusted, and form the OpenPCC Trusted Compute Base (TCB),
 after validation through their respective chain-of-trust.
 
-% Table 3. Platform Provider Threats and Remediations
-\jmotable{tables/table3.png}{Table 3. Platform Provider Threats and Remediations}
+\begin{longtable}[c]{|p{0.2\textwidth}|p{0.35\textwidth}|p{0.35\textwidth}|}
+\caption{Platform Provider Threats and Remediations}
+\label{platformthreats}\\
+\hline
+\textbf{{\small Threat Scenario}} & \textbf{{\small Details}} & \textbf{{\small Mitigations and Remediations}}
+\endhead
+\hline
+{\small Physical hardware tampering} &
+  {\small An on-site network engineer or intruder could augment hardware to compromise the Trusted Execution Environment (TEE) configuration to extract sensitive information.} &
+  {\small While physical access is strictly out-of-scope, OpenPCC enables client validation of SEV-SNP/TDX configuration in the attestation bundle.} \\ \hline
+{\small Virtualization sandbox vulnerabilities} &
+  {\small An attacker could exploit weaknesses in the cloud virtualization and multi-tenant operations to eavesdrop on other compute instances or perform privileged operations across the sandbox boundary.} &
+  {\small While cloud virtualization is strictly out-of-scope, OpenPCC enables client validation of the Trusted Execution Environment status through the attestation bundle.} \\ \hline
+{\small Compute image tampering} &
+  {\small An insider could manipulate the final image dispatched to compute nodes, inserting malicious code into an otherwise valid image.} &
+  {\small All file system contents are included in the attestation bundle provided to an OpenPCC client, including inference model content, such as weights.} \\ \hline
+\end{longtable}
 
 \subsubsection{Inference Engines}\label{inference-engines}
 
@@ -1702,8 +1744,24 @@ isolation of potential zero-day compromises of the chosen inference
 engine (SGLang, vLLM, etc.), making the platform more capable of hosting
 generic workloads as a side effect.
 
-% Table 4. Inference Engine Threats and Remediations
-\jmotable{tables/table4.png}{Table 4. Inference Engine Threats and Remediations}
+\label{inferencethreats}
+\begin{tabularx}{\textwidth}{|p{0.2\textwidth}|p{0.35\textwidth}|X|} \hline
+\caption{Interference Engine Threats and Remediations}
+\small
+\textbf{Threat Scenario} & \textbf{Details} & \textbf{Mitigations \& Remediations} \\ \hline
+Inference engine side-channel (prompt/output leak, prompt injection) &
+  A vulnerable inference engine could leak sensitive user content to another user through the inference engine cache inside  its sandbox or to other host system components. &
+  Rigorously isolate inference engines from host system components using available security modules, such as SELinux. OpenPCC implementers should review inference engines hosted on ComputeNode instances for tenant isolation, and perform continuous monitoring for identified inference engine side channel vulnerabilities. \\ \hline
+Exploitable vulnerabilities in inference engine &
+  With access to a vulnerable inference engine, an attacker could perform arbitrary operations on the host compute instance. &
+  OpenPCC implementers must use strict application sandboxing and immutable filesystems to limit malicious process escalation. \\ \hline
+Sandbox escape &
+  An attacker may leverage a vulnerable inference engine to escape an individual user’s inference sandbox and access file system content, or perform other privileged operations. &
+  OpenPCC implementers must use strict application sandboxing and immutable filesystems to limit malicious process escalation. \\ \hline
+Undesired network behavior &
+  Misconfigured inference engines and compute instances could perform undesired network operations that could act as a side-channel leak for sensitive data. &
+  OpenPCC implementers should include firewall rules limited to pass only necessary system service traffic. Implementors ese may include restrictions in the instance layer, as well as the cloud-provider layer if applicable to provisioned environments. \\  \hline
+\end{tabularx}
 
 \subsubsection{System Administrators}\label{system-administrators}
 
@@ -1711,8 +1769,22 @@ OpenPCC considers and mitigates the following threat scenarios related
 to insider threats from compromised system administrators and/or
 developers.
 
-% Table 5. System Administrator Threats and Remediations
-\jmotable{tables/table5.png}{Table 5. System Administrator Threats and Remediations}
+\label{sysadminthreats}
+\begin{tabularx}{\textwidth}{|p{0.2\textwidth}|p{0.3\textwidth}|X|} \hline
+\caption{System Administrator Threats and Remediations}
+\small
+\textbf{Threat Scenario} & \textbf{Details} & \textbf{Mitigations \& Remediations} \\ \hline
+Remote administration tunnel compromise &
+  An attacker with system administration privileges may use an existing remote tunnel (serial console, ssh, etc.) to compromise the compute instance, if misconfigured. &
+  OpenPCC compute images must disable all identifiable remote management services. This includes, but is not limited to: ssh, serial console, cloud-init. OpenPCC clients should only trust ComputeNode instances with a compliant OpenPCC image manifest record in the transparency log. \\ \hline
+Developer credential compromise &
+  Local developer credentials (private keys, auth tokens, etc.), in certain circumstances, may be used to tamper with cloud services and instances. &
+  Restrict OpenPCC related developer credentials following the principle of least authority, and ensure all running compute nodes are inaccessible regardless of possessing private keys/secrets. \\ \hline
+Malicious software patch &
+  An insider threat may push software patches with vulnerabilities or backdoors into the stack, to exploit at a later time. &
+  to increase the visibility of such compromise attempts, open-source core components of the OpenPCC stack so that anyone may audit it. Moreover, implementers may employ review practices for all patches to OpenPCC components. \\ \hline
+\end{tabularx}
+
 
 \subsubsection{Malicious Users}\label{malicious-users}
 
@@ -1727,16 +1799,41 @@ inference from those specific models. Additionally, OpenPCC's
 anonymization scheme must prevent users from being able to track or
 monitor the usage of other users.
 
-% Table 6. Malicious User Threats and Remediations
-\jmotable{tables/table6.png}{Table 6. Malicious User Threats and Remediations}
+\label{malicioususerthreats}
+\begin{tabularx}{\textwidth}{|p{0.2\textwidth}|p{0.3\textwidth}|X|} \hline
+\caption{Malicious User Threats and Remediations}
+\small
+\textbf{Threat Scenario} &
+  \textbf{Details} &
+  \textbf{Mitigations \& Remediations} \\ \hline
+Side-channel monitoring &
+  A malicious  user may use their API credentials to actively monitor for platform usage, attempting to reconstruct other users’ behavior through correlation. &
+  The OpenPCC control plane shall minimize the number of potential side channel leaks, fully tolerant up to one platform actor compromise, and partially tolerant (up to side channel correlation) for all-but-one platform actor compromise. \\ \hline
+Asymmetric resource expenditure &
+  A malicious user may use their API credentials to exhaust OpenPCC platform resources at minimal personal cost. &
+  The OpenPCC API minimizes this risk by utilizing a pay-as-you-go credit system with stochastic rounding. \\ \hline
+Multi-tenant sandbox escape &
+  A malicious user could use their API credentials to exploit a vulnerable inference engine to escape the inference engine sandbox, performing privileged operations or leaking other users’ sensitive data. &
+  Harden the OpenPCC compute image using kernel security modules, strict firewall rules, and immutable file system content to restrict the operations available to a compromised inference engine. \\ \hline
+\end{tabularx}
+
 
 \subsubsection{External Attackers}\label{external-attackers}
 
 Threats from External Attackers are modeled as originating from a
 low-privileged, publicly accessible attack surface.
 
-% Table 7. External Attacker Threats and Remediations
-\jmotable{tables/table7.png}{Table 7. External Attacker Threats and Remediations}
+\label{externalthreats}
+\begin{tabularx}{\textwidth}{|p{0.2\textwidth}|p{0.35\textwidth}|X|} \hline
+\caption{External Attacker Threats and Remediations}
+\small
+\textbf{Threat Scenario} &
+  \textbf{Details} &
+  \textbf{Mitigations \& Remediations} \\ \hline
+Public API abuse &
+  Any non-authenticated API endpoints could be targeted by an external attacker to evaluate side channel leaks and attempt to escalate privileges. &
+  All non-authenticated API endpoints must not leak any sensitive data or perform mutable operations – they must be read-only operations. \\ \hline
+\end{tabularx}
 
 
 \section{Implementations}\label{implementations}
@@ -1752,44 +1849,44 @@ source-available license from Confident Security.
 In production services, an unrelated third party must operate the Relay
 component to ensure Relay request logs are not available to the primary
 operator running the other components. At the time of publication,
-\href{https://fastly.com}{\ul{Fastly}},
-\href{https://oblivious.network}{\ul{Oblivious Network}}, and
-\href{https://cloudflare.com}{\ul{Cloudflare}} offer commercial OHTTP
+\href{https://fastly.com}{Fastly},
+\href{https://oblivious.network}{Oblivious Network}, and
+\href{https://cloudflare.com}{Cloudflare} offer commercial OHTTP
 Relay services.
 
 \subsection{OpenPCC Client SDKs}\label{openpcc-client-sdks}
 
 Python Client SDK
-\href{http://github.com/confidentsecurity/confsec-py}{\ul{github.com/confidentsecurity/confsec-py}}
+\href{http://github.com/confidentsecurity/confsec-py}{github.com/confidentsecurity/confsec-py}
 
 Typescript \& Javascript SDK
-\href{http://github.com/confidentsecurity/confsec-js}{\ul{github.com/confidentsecurity/confsec-js}}
+\href{http://github.com/confidentsecurity/confsec-js}{github.com/confidentsecurity/confsec-js}
 
 Go Client SDK
-\href{http://github.com/openpcc/openpcc}{\ul{github.com/openpcc/openpcc}}
+\href{http://github.com/openpcc/openpcc}{github.com/openpcc/openpcc}
 
 \subsection{OpenPCC System Components}\label{openpcc-system-components}
 
 AuthBank, Relay, Gateway, BlindBank, Router
-\href{http://github.com/openpcc/openpcc}{\ul{github.com/openpcc/openpcc}}
+\href{http://github.com/openpcc/openpcc}{github.com/openpcc/openpcc}
 
 ComputeNode
-\href{http://github.com/confidentsecurity/confidentcompute}{\ul{github.com/confidentsecurity/confidentcompute}}
+\href{http://github.com/confidentsecurity/confidentcompute}{github.com/confidentsecurity/confidentcompute}
 
 \subsubsection{Cross-component
 Libraries}\label{cross-component-libraries}
 
 Binary HTTP (Go)
-\href{http://github.com/openpcc/bhttp}{\ul{github.com/openpcc/bhttp}}
+\href{http://github.com/openpcc/bhttp}{github.com/openpcc/bhttp}
 
 Oblivious HTTP (Go)
-\href{http://github.com/openpcc/ohttp}{\ul{github.com/openpcc/ohttp}}
+\href{http://github.com/openpcc/ohttp}{github.com/openpcc/ohttp}
 
 Two-way HPKE (Go)
-\href{http://github.com/openpcc/twoway}{\ul{github.com/openpcc/twoway}}
+\href{http://github.com/openpcc/twoway}{github.com/openpcc/twoway}
 
 NVIDIA Trusted Compute (Go)
-\href{http://github.com/confidentsecurity/go-nvtrust}{\ul{github.com/confidentsecurity/go-nvtrust}}
+\href{http://github.com/confidentsecurity/go-nvtrust}{github.com/confidentsecurity/go-nvtrust}
 
 \subsection{CONFSEC, an End-to-End OpenPCC
 Service}\label{confsec-an-end-to-end-openpcc-service}
@@ -1800,7 +1897,7 @@ OpenPCC system. As part of CONFSEC, Confident Security provides a
 source-available ComputeNode, fulfilling the requirements of the
 Confident-Compute standard described above. For more information about
 the CONFSEC end-to-end OpenPCC service from Confident Security, see
-\href{https://confident.security}{\ul{confident.security}}.
+\href{https://confident.security}{confident.security}.
 
 \section{Appendix A: OpenPCC HTTP API
 Reference}\label{appendix-a-openpcc-http-api-reference}
