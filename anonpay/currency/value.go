@@ -99,6 +99,108 @@ func MustSpecial(signedAmount int64) Value {
 // Rounded does not round to the nearest number; instead it uses the provided roundingFactor value,
 // which should be randomly chosen in the interval [0, 1.0), to round stochastically to an appropriate value.
 // When combined with a fair random number generator, this rounding is guaranteed to be fair and unbiased over the long run.
+func RoundedInt(signedAmount uint64, rand uint64) (Value, error) {
+	// signedAmount is unsigned, so it cannot be negative.
+	// No negative check needed; the type guarantees non‑negative values.
+	// The original Rounded handled fractional amounts via math.Floor/Ceil.
+	// In the integer‑only version we treat signedAmount as an exact integer.
+	lowerBound := signedAmount
+	upperBound := signedAmount
+	// Since signedAmount is an integer, it is always an integer value.
+	isInteger := true
+
+	if upperBound > MaxAmount {
+		return Zero, fmt.Errorf("%w, got %d", ErrOverflow, upperBound)
+	}
+
+	// The integer‑only rounding mirrors the logic of the original Rounded
+	// but works entirely with integer arithmetic.  The rounding decision
+	// is based on a random integer `rand` in the range [0, 1<<53).
+	// - The input is an integer
+	//   - If there is an exact representation of that integer, then we want to return that.
+	//     - If the input is <= 32 there is an exact representation by definition.
+	//     - Otherwise, if the truncated value (the lower bound) equals the input,
+	//       then the input has an exact representation so we can return that.
+	//   - Otherwise we find the lower and upper bound which are representable by
+	//     truncating to 5 significant bits, then incrementing the last signficant bit
+	// - The input is not an integer
+	//   - We cannot represent it exactly, so we need to know the lower/upper bounds
+	//   - Initial bounds are calculated by doing floor and ceiling on the number
+	//   - If the ceiling is <= 32, then both of these bounds are representable exactly
+	//        (for a pair of consecutive numbers both >=32, at least one has more than 5 significant bits)
+	//        Proof: assume one of numbers has at most 5 significant bits and >1 trailing zero bit (else it would be less than 32)
+	//        The other number is one away from that value, which means it has opposite polarity, so it must have a 1 in the LSB
+	//        which means it has zero trailing bits and therefore at least 6 significant bits.
+	//   - If the ceiling > 32, then the bounds cannot be represented exactly and must be truncated.
+	//     It is safe to do so by truncating just the lower bound and incrementing the last significant bit for the upper bound.
+	//     We do not need to use the ceiling value because the truncation process guarantees the upper bound will be
+	//     at least 1 greater than the lower bound and will be the next representable number higher than the lower bound.
+	// Once we have the lower and upper bound, we can then calculate what fraction of the time we should return the lower bound.
+	//  - This is given by lowerProbability, which is the proportion of space between upperBound and signedAmount compared to lowerBound.
+	//    I found this counter-intuitive, but consider if signedAmount is close to upperBound, then lowerProbability should be low.
+	//  - If the roundingFactor is > lowerProbability, we round up, else we round down.
+	//
+	// Examples:
+	// signedAmount roundingFactor lowerBound upperBound lowerProbability result
+	//            1              X          1          1                -      1
+	//          1.6              0          1          2              0.4      1
+	//          1.6            0.5          1          2              0.4      2
+	//          1.6              1          1          2              0.4      2
+	//          1.6              -          1          2              0.4      1 40% of the time, 2 60% of the time -> 1.6 on average
+	//           68              X         68         72                -     68
+	//           69              0         68         72             0.75     68
+	//           69            0.5         68         72             0.75     68
+	//           69              1         68         72             0.75     69
+	//           69              -         68         72             0.75     68 75% of the time, 72 25% of the time -> 69 on average
+	//        145.3            0.5        144        152           0.8375     144 83.75% of the time, 152 16.25% of the time -> 145.3 on average
+
+	if upperBound <= 32 {
+		// Both bounds can be represented exactly (they have 5 or fewer significant bits).
+		if isInteger {
+			// We can just create the integer exactly.
+			return createExactUnsafe(upperBound)
+		}
+	} else {
+		// At least either the lower or upper bound cannot be represented exactly (it has more than 5 significant bits).
+		// So we find those bounds for rounding.
+		amount := lowerBound
+
+		// Round value to identify lower and upper bound.
+		bitsNeeded := bits.Len64(amount)
+		if bitsNeeded < 5 {
+			return Zero, fmt.Errorf("calculation results in negative bitsNeeded: %d", bitsNeeded)
+		}
+		shiftToClear := uint(bitsNeeded - 5) // #nosec
+
+		truncatedAmount := amount >> shiftToClear
+		lowerBound = truncatedAmount << shiftToClear
+		upperBound = (truncatedAmount + 1) << shiftToClear
+
+		if isInteger && lowerBound == amount {
+			// This is an integer that can be represented exactly, so no need to round.
+			return createExactUnsafe(amount)
+		}
+	}
+
+	// Choose which to use.
+	// lowerProbability = (upperBound - signedAmount) / (upperBound - lowerBound)
+	// We compare `rand` (scaled to [0, 1<<53)) against this fraction.
+	// Multiply both sides by (1<<53) to stay in integer space.
+	const scale = uint64(1) << 53
+	left := rand * (upperBound - lowerBound)
+	right := (upperBound - signedAmount) * scale
+
+	if left > right {
+		return createExactUnsafe(upperBound)
+	}
+
+	return createExactUnsafe(lowerBound)
+}
+
+// Rounded is a compatibility wrapper that accepts floating‑point inputs
+// and forwards to RoundedInt, which uses only integer arithmetic.
+// The roundingFactor is expected to be in the interval [0,1). Values outside
+// this range will result in an error.
 func Rounded(signedAmount float64, roundingFactor float64) (Value, error) {
 	if signedAmount < 0 {
 		return Zero, ErrNegativeUnrepresentable
@@ -179,6 +281,7 @@ func Rounded(signedAmount float64, roundingFactor float64) (Value, error) {
 	}
 
 	// Choose which to use.
+	// lowerProbability = (upperBound - signedAmount) / (upperBound - lowerBound)
 	lowerProbability := (float64(upperBound) - signedAmount) / (float64(upperBound) - float64(lowerBound))
 
 	if roundingFactor > lowerProbability {
@@ -265,12 +368,12 @@ func (c Value) AmountOrZero() int64 {
 }
 
 // RandFloat64 returns a random float64 in the range [0.0, 1.0).
-func RandFloat64() (float64, error) {
+func RandUint53() (uint64, error) {
 	i, err := rand.Int(rand.Reader, big.NewInt(1<<53))
 	if err != nil {
 		return 0, err
 	}
-	return float64(i.Int64()) / (1 << 53), nil
+	return uint64(i.Int64()), nil
 }
 
 // BlindBytes formats the currency as a binary message that the Client and Server use in blinding operations.

@@ -65,7 +65,7 @@ func (a *account) withdrawFull(t *testing.T, roundedFunc RoundedCurrencyFunc) (*
 		return nil, errors.New("balance is zero, can't withdraw full")
 	}
 
-	amount, err := roundedFunc(float64(a.balance))
+	amount, err := roundedFunc(uint64(a.balance))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create rounded credit: %w", err)
 	}
