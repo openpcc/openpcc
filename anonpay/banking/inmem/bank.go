@@ -31,12 +31,12 @@ type Bank struct {
 }
 
 func NewBank(issuer *anonpay.Issuer, nonceLocker anonpay.NonceLocker) *Bank {
-	return NewBankWithRoundFunc(issuer, nonceLocker, func(signedAmount float64) (currency.Value, error) {
-		roundingFactor, err := currency.RandFloat64()
+	return NewBankWithRoundFunc(issuer, nonceLocker, func(signedAmount uint64) (currency.Value, error) {
+		randVal, err := currency.RandUint53()
 		if err != nil {
-			return currency.Value{}, fmt.Errorf("failed to get rounding factor: %w", err)
+			return currency.Value{}, fmt.Errorf("failed to get random uint53: %w", err)
 		}
-		val, err := currency.Rounded(signedAmount, roundingFactor)
+		val, err := currency.RoundedInt(signedAmount, randVal)
 		if err != nil {
 			return currency.Value{}, fmt.Errorf("failed to round currency: %w", err)
 		}
@@ -44,7 +44,7 @@ func NewBank(issuer *anonpay.Issuer, nonceLocker anonpay.NonceLocker) *Bank {
 	})
 }
 
-type CurencyRoundFunc func(signedAmount float64) (currency.Value, error)
+type CurencyRoundFunc func(signedAmount uint64) (currency.Value, error)
 
 // NewBankWithRoundFunc allows you to specifiy a custom rounding function used during [WithdrawFullUnblinded],
 // useful for when you want to use specific rounding in test cases. Should not be used in production.
@@ -147,7 +147,7 @@ func (b *Bank) WithdrawFullUnblinded(ctx context.Context, _ []byte, account bank
 		return nil, errors.New("can't withdraw balance over max currency amount")
 	}
 
-	creditAmount, err := b.roundFunc(float64(stored.balance))
+	creditAmount, err := b.roundFunc(uint64(stored.balance))
 	if err != nil {
 		return nil, err
 	}

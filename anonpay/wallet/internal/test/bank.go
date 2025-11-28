@@ -27,14 +27,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type RoundedCurrencyFunc func(signedAmount float64) (currency.Value, error)
+type RoundedCurrencyFunc func(signedAmount uint64) (currency.Value, error)
 
 func NewBlindBank(t *testing.T) (*inmem.Bank, *transfer.BlindBank) {
 	issuer := anonpaytest.MustNewIssuer()
 	payee := anonpaytest.MustNewPayee()
-	srcBank := inmem.NewBankWithRoundFunc(issuer, &anonpaytest.NoopNonceLocker{}, func(signedAmount float64) (currency.Value, error) {
+	srcBank := inmem.NewBankWithRoundFunc(issuer, &anonpaytest.NoopNonceLocker{}, func(signedAmount uint64) (currency.Value, error) {
 		// always round down in this test case for consistent results.
-		return currency.Rounded(signedAmount, 0)
+		return currency.RoundedInt(signedAmount, 0)
 	})
 	return srcBank, transfer.NewBlindBank(payee, srcBank)
 }
@@ -266,7 +266,7 @@ func splitBalanceExact(signedAmount int64) ([]currency.Value, error) {
 	remaining := signedAmount
 	for remaining > 0 {
 		n := min(remaining, currency.MaxAmount)
-		val, err := currency.Rounded(float64(n), 0.0)
+		val, err := currency.RoundedInt(uint64(n), 0)
 		if err != nil {
 			return nil, fmt.Errorf("failed to round %d down", n)
 		}
