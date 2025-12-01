@@ -58,6 +58,7 @@ const (
 	EvidenceType_EVIDENCE_TYPE_NVIDIA_SWITCH_INTERMEDIATE_CERTIFICATE EvidenceType = 15
 	EvidenceType_EVIDENCE_TYPE_SEVSNP_EXTENDED_REPORT                 EvidenceType = 16
 	EvidenceType_EVIDENCE_TYPE_AK_TPMT_PUBLIC                         EvidenceType = 17
+	EvidenceType_EVIDENCE_TYPE_AZURE_CVM_RUNTIME_DATA                 EvidenceType = 18
 )
 
 // Enum value maps for EvidenceType.
@@ -81,6 +82,7 @@ var (
 		15: "EVIDENCE_TYPE_NVIDIA_SWITCH_INTERMEDIATE_CERTIFICATE",
 		16: "EVIDENCE_TYPE_SEVSNP_EXTENDED_REPORT",
 		17: "EVIDENCE_TYPE_AK_TPMT_PUBLIC",
+		18: "EVIDENCE_TYPE_AZURE_CVM_RUNTIME_DATA",
 	}
 	EvidenceType_value = map[string]int32{
 		"EVIDENCE_TYPE_UNSPECIFIED":                            0,
@@ -101,6 +103,7 @@ var (
 		"EVIDENCE_TYPE_NVIDIA_SWITCH_INTERMEDIATE_CERTIFICATE": 15,
 		"EVIDENCE_TYPE_SEVSNP_EXTENDED_REPORT":                 16,
 		"EVIDENCE_TYPE_AK_TPMT_PUBLIC":                         17,
+		"EVIDENCE_TYPE_AZURE_CVM_RUNTIME_DATA":                 18,
 	}
 )
 
@@ -1118,6 +1121,613 @@ func (b0 TDXCollateral_builder) Build() *TDXCollateral {
 	return m0
 }
 
+type AzureCVMRuntimeData struct {
+	state                    protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Keys          *[]*AzureCVMKey        `protobuf:"bytes,1,rep,name=keys"`
+	xxx_hidden_Configuration *AzureCVMConfiguration `protobuf:"bytes,2,opt,name=configuration"`
+	xxx_hidden_UserData      []byte                 `protobuf:"bytes,3,opt,name=user_data,json=userData"`
+	xxx_hidden_OriginalJson  []byte                 `protobuf:"bytes,4,opt,name=original_json,json=originalJson"`
+	xxx_hidden_Signature     []byte                 `protobuf:"bytes,5,opt,name=signature"`
+	XXX_raceDetectHookData   protoimpl.RaceDetectHookData
+	XXX_presence             [1]uint32
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
+}
+
+func (x *AzureCVMRuntimeData) Reset() {
+	*x = AzureCVMRuntimeData{}
+	mi := &file_evidence_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AzureCVMRuntimeData) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AzureCVMRuntimeData) ProtoMessage() {}
+
+func (x *AzureCVMRuntimeData) ProtoReflect() protoreflect.Message {
+	mi := &file_evidence_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+func (x *AzureCVMRuntimeData) GetKeys() []*AzureCVMKey {
+	if x != nil {
+		if x.xxx_hidden_Keys != nil {
+			return *x.xxx_hidden_Keys
+		}
+	}
+	return nil
+}
+
+func (x *AzureCVMRuntimeData) GetConfiguration() *AzureCVMConfiguration {
+	if x != nil {
+		return x.xxx_hidden_Configuration
+	}
+	return nil
+}
+
+func (x *AzureCVMRuntimeData) GetUserData() []byte {
+	if x != nil {
+		return x.xxx_hidden_UserData
+	}
+	return nil
+}
+
+func (x *AzureCVMRuntimeData) GetOriginalJson() []byte {
+	if x != nil {
+		return x.xxx_hidden_OriginalJson
+	}
+	return nil
+}
+
+func (x *AzureCVMRuntimeData) GetSignature() []byte {
+	if x != nil {
+		return x.xxx_hidden_Signature
+	}
+	return nil
+}
+
+func (x *AzureCVMRuntimeData) SetKeys(v []*AzureCVMKey) {
+	x.xxx_hidden_Keys = &v
+}
+
+func (x *AzureCVMRuntimeData) SetConfiguration(v *AzureCVMConfiguration) {
+	x.xxx_hidden_Configuration = v
+}
+
+func (x *AzureCVMRuntimeData) SetUserData(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_UserData = v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 5)
+}
+
+func (x *AzureCVMRuntimeData) SetOriginalJson(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_OriginalJson = v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 3, 5)
+}
+
+func (x *AzureCVMRuntimeData) SetSignature(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_Signature = v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 4, 5)
+}
+
+func (x *AzureCVMRuntimeData) HasConfiguration() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Configuration != nil
+}
+
+func (x *AzureCVMRuntimeData) HasUserData() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 2)
+}
+
+func (x *AzureCVMRuntimeData) HasOriginalJson() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 3)
+}
+
+func (x *AzureCVMRuntimeData) HasSignature() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 4)
+}
+
+func (x *AzureCVMRuntimeData) ClearConfiguration() {
+	x.xxx_hidden_Configuration = nil
+}
+
+func (x *AzureCVMRuntimeData) ClearUserData() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 2)
+	x.xxx_hidden_UserData = nil
+}
+
+func (x *AzureCVMRuntimeData) ClearOriginalJson() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 3)
+	x.xxx_hidden_OriginalJson = nil
+}
+
+func (x *AzureCVMRuntimeData) ClearSignature() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 4)
+	x.xxx_hidden_Signature = nil
+}
+
+type AzureCVMRuntimeData_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Keys          []*AzureCVMKey
+	Configuration *AzureCVMConfiguration
+	UserData      []byte
+	OriginalJson  []byte
+	Signature     []byte
+}
+
+func (b0 AzureCVMRuntimeData_builder) Build() *AzureCVMRuntimeData {
+	m0 := &AzureCVMRuntimeData{}
+	b, x := &b0, m0
+	_, _ = b, x
+	x.xxx_hidden_Keys = &b.Keys
+	x.xxx_hidden_Configuration = b.Configuration
+	if b.UserData != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 5)
+		x.xxx_hidden_UserData = b.UserData
+	}
+	if b.OriginalJson != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 3, 5)
+		x.xxx_hidden_OriginalJson = b.OriginalJson
+	}
+	if b.Signature != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 4, 5)
+		x.xxx_hidden_Signature = b.Signature
+	}
+	return m0
+}
+
+type AzureCVMKey struct {
+	state                  protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Kid         *string                `protobuf:"bytes,1,opt,name=kid"`
+	xxx_hidden_KeyOps      []string               `protobuf:"bytes,2,rep,name=key_ops,json=keyOps"`
+	xxx_hidden_Kty         *string                `protobuf:"bytes,3,opt,name=kty"`
+	xxx_hidden_E           []byte                 `protobuf:"bytes,4,opt,name=e"`
+	xxx_hidden_N           []byte                 `protobuf:"bytes,5,opt,name=n"`
+	XXX_raceDetectHookData protoimpl.RaceDetectHookData
+	XXX_presence           [1]uint32
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
+}
+
+func (x *AzureCVMKey) Reset() {
+	*x = AzureCVMKey{}
+	mi := &file_evidence_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AzureCVMKey) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AzureCVMKey) ProtoMessage() {}
+
+func (x *AzureCVMKey) ProtoReflect() protoreflect.Message {
+	mi := &file_evidence_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+func (x *AzureCVMKey) GetKid() string {
+	if x != nil {
+		if x.xxx_hidden_Kid != nil {
+			return *x.xxx_hidden_Kid
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *AzureCVMKey) GetKeyOps() []string {
+	if x != nil {
+		return x.xxx_hidden_KeyOps
+	}
+	return nil
+}
+
+func (x *AzureCVMKey) GetKty() string {
+	if x != nil {
+		if x.xxx_hidden_Kty != nil {
+			return *x.xxx_hidden_Kty
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *AzureCVMKey) GetE() []byte {
+	if x != nil {
+		return x.xxx_hidden_E
+	}
+	return nil
+}
+
+func (x *AzureCVMKey) GetN() []byte {
+	if x != nil {
+		return x.xxx_hidden_N
+	}
+	return nil
+}
+
+func (x *AzureCVMKey) SetKid(v string) {
+	x.xxx_hidden_Kid = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 5)
+}
+
+func (x *AzureCVMKey) SetKeyOps(v []string) {
+	x.xxx_hidden_KeyOps = v
+}
+
+func (x *AzureCVMKey) SetKty(v string) {
+	x.xxx_hidden_Kty = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 5)
+}
+
+func (x *AzureCVMKey) SetE(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_E = v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 3, 5)
+}
+
+func (x *AzureCVMKey) SetN(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_N = v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 4, 5)
+}
+
+func (x *AzureCVMKey) HasKid() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 0)
+}
+
+func (x *AzureCVMKey) HasKty() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 2)
+}
+
+func (x *AzureCVMKey) HasE() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 3)
+}
+
+func (x *AzureCVMKey) HasN() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 4)
+}
+
+func (x *AzureCVMKey) ClearKid() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 0)
+	x.xxx_hidden_Kid = nil
+}
+
+func (x *AzureCVMKey) ClearKty() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 2)
+	x.xxx_hidden_Kty = nil
+}
+
+func (x *AzureCVMKey) ClearE() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 3)
+	x.xxx_hidden_E = nil
+}
+
+func (x *AzureCVMKey) ClearN() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 4)
+	x.xxx_hidden_N = nil
+}
+
+type AzureCVMKey_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Kid    *string
+	KeyOps []string
+	Kty    *string
+	E      []byte
+	N      []byte
+}
+
+func (b0 AzureCVMKey_builder) Build() *AzureCVMKey {
+	m0 := &AzureCVMKey{}
+	b, x := &b0, m0
+	_, _ = b, x
+	if b.Kid != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 5)
+		x.xxx_hidden_Kid = b.Kid
+	}
+	x.xxx_hidden_KeyOps = b.KeyOps
+	if b.Kty != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 5)
+		x.xxx_hidden_Kty = b.Kty
+	}
+	if b.E != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 3, 5)
+		x.xxx_hidden_E = b.E
+	}
+	if b.N != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 4, 5)
+		x.xxx_hidden_N = b.N
+	}
+	return m0
+}
+
+type AzureCVMConfiguration struct {
+	state                         protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_ConsoleEnabled     bool                   `protobuf:"varint,1,opt,name=console_enabled,json=consoleEnabled"`
+	xxx_hidden_RootCertThumbprint []byte                 `protobuf:"bytes,2,opt,name=root_cert_thumbprint,json=rootCertThumbprint"`
+	xxx_hidden_SecureBoot         bool                   `protobuf:"varint,3,opt,name=secure_boot,json=secureBoot"`
+	xxx_hidden_TpmEnabled         bool                   `protobuf:"varint,4,opt,name=tpm_enabled,json=tpmEnabled"`
+	xxx_hidden_TpmPersisted       bool                   `protobuf:"varint,5,opt,name=tpm_persisted,json=tpmPersisted"`
+	xxx_hidden_VmUniqueId         *string                `protobuf:"bytes,6,opt,name=vm_unique_id,json=vmUniqueId"`
+	XXX_raceDetectHookData        protoimpl.RaceDetectHookData
+	XXX_presence                  [1]uint32
+	unknownFields                 protoimpl.UnknownFields
+	sizeCache                     protoimpl.SizeCache
+}
+
+func (x *AzureCVMConfiguration) Reset() {
+	*x = AzureCVMConfiguration{}
+	mi := &file_evidence_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AzureCVMConfiguration) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AzureCVMConfiguration) ProtoMessage() {}
+
+func (x *AzureCVMConfiguration) ProtoReflect() protoreflect.Message {
+	mi := &file_evidence_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+func (x *AzureCVMConfiguration) GetConsoleEnabled() bool {
+	if x != nil {
+		return x.xxx_hidden_ConsoleEnabled
+	}
+	return false
+}
+
+func (x *AzureCVMConfiguration) GetRootCertThumbprint() []byte {
+	if x != nil {
+		return x.xxx_hidden_RootCertThumbprint
+	}
+	return nil
+}
+
+func (x *AzureCVMConfiguration) GetSecureBoot() bool {
+	if x != nil {
+		return x.xxx_hidden_SecureBoot
+	}
+	return false
+}
+
+func (x *AzureCVMConfiguration) GetTpmEnabled() bool {
+	if x != nil {
+		return x.xxx_hidden_TpmEnabled
+	}
+	return false
+}
+
+func (x *AzureCVMConfiguration) GetTpmPersisted() bool {
+	if x != nil {
+		return x.xxx_hidden_TpmPersisted
+	}
+	return false
+}
+
+func (x *AzureCVMConfiguration) GetVmUniqueId() string {
+	if x != nil {
+		if x.xxx_hidden_VmUniqueId != nil {
+			return *x.xxx_hidden_VmUniqueId
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *AzureCVMConfiguration) SetConsoleEnabled(v bool) {
+	x.xxx_hidden_ConsoleEnabled = v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 6)
+}
+
+func (x *AzureCVMConfiguration) SetRootCertThumbprint(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_RootCertThumbprint = v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 6)
+}
+
+func (x *AzureCVMConfiguration) SetSecureBoot(v bool) {
+	x.xxx_hidden_SecureBoot = v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 6)
+}
+
+func (x *AzureCVMConfiguration) SetTpmEnabled(v bool) {
+	x.xxx_hidden_TpmEnabled = v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 3, 6)
+}
+
+func (x *AzureCVMConfiguration) SetTpmPersisted(v bool) {
+	x.xxx_hidden_TpmPersisted = v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 4, 6)
+}
+
+func (x *AzureCVMConfiguration) SetVmUniqueId(v string) {
+	x.xxx_hidden_VmUniqueId = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 5, 6)
+}
+
+func (x *AzureCVMConfiguration) HasConsoleEnabled() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 0)
+}
+
+func (x *AzureCVMConfiguration) HasRootCertThumbprint() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 1)
+}
+
+func (x *AzureCVMConfiguration) HasSecureBoot() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 2)
+}
+
+func (x *AzureCVMConfiguration) HasTpmEnabled() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 3)
+}
+
+func (x *AzureCVMConfiguration) HasTpmPersisted() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 4)
+}
+
+func (x *AzureCVMConfiguration) HasVmUniqueId() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 5)
+}
+
+func (x *AzureCVMConfiguration) ClearConsoleEnabled() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 0)
+	x.xxx_hidden_ConsoleEnabled = false
+}
+
+func (x *AzureCVMConfiguration) ClearRootCertThumbprint() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 1)
+	x.xxx_hidden_RootCertThumbprint = nil
+}
+
+func (x *AzureCVMConfiguration) ClearSecureBoot() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 2)
+	x.xxx_hidden_SecureBoot = false
+}
+
+func (x *AzureCVMConfiguration) ClearTpmEnabled() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 3)
+	x.xxx_hidden_TpmEnabled = false
+}
+
+func (x *AzureCVMConfiguration) ClearTpmPersisted() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 4)
+	x.xxx_hidden_TpmPersisted = false
+}
+
+func (x *AzureCVMConfiguration) ClearVmUniqueId() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 5)
+	x.xxx_hidden_VmUniqueId = nil
+}
+
+type AzureCVMConfiguration_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	ConsoleEnabled     *bool
+	RootCertThumbprint []byte
+	SecureBoot         *bool
+	TpmEnabled         *bool
+	TpmPersisted       *bool
+	VmUniqueId         *string
+}
+
+func (b0 AzureCVMConfiguration_builder) Build() *AzureCVMConfiguration {
+	m0 := &AzureCVMConfiguration{}
+	b, x := &b0, m0
+	_, _ = b, x
+	if b.ConsoleEnabled != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 6)
+		x.xxx_hidden_ConsoleEnabled = *b.ConsoleEnabled
+	}
+	if b.RootCertThumbprint != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 6)
+		x.xxx_hidden_RootCertThumbprint = b.RootCertThumbprint
+	}
+	if b.SecureBoot != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 6)
+		x.xxx_hidden_SecureBoot = *b.SecureBoot
+	}
+	if b.TpmEnabled != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 3, 6)
+		x.xxx_hidden_TpmEnabled = *b.TpmEnabled
+	}
+	if b.TpmPersisted != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 4, 6)
+		x.xxx_hidden_TpmPersisted = *b.TpmPersisted
+	}
+	if b.VmUniqueId != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 5, 6)
+		x.xxx_hidden_VmUniqueId = b.VmUniqueId
+	}
+	return m0
+}
+
 var File_evidence_proto protoreflect.FileDescriptor
 
 const file_evidence_proto_rawDesc = "" +
@@ -1160,7 +1770,29 @@ const file_evidence_proto_rawDesc = "" +
 	"\vtcb_headers\x18\f \x01(\v2\x19.csprotos.ResponseHeadersR\n" +
 	"tcbHeaders\x12@\n" +
 	"\x1ctcb_intermediate_certificate\x18\r \x01(\fR\x1atcbIntermediateCertificate\x120\n" +
-	"\x14tcb_root_certificate\x18\x0e \x01(\fR\x12tcbRootCertificate*\xb9\x05\n" +
+	"\x14tcb_root_certificate\x18\x0e \x01(\fR\x12tcbRootCertificate\"\xe7\x01\n" +
+	"\x13AzureCVMRuntimeData\x12)\n" +
+	"\x04keys\x18\x01 \x03(\v2\x15.csprotos.AzureCVMKeyR\x04keys\x12E\n" +
+	"\rconfiguration\x18\x02 \x01(\v2\x1f.csprotos.AzureCVMConfigurationR\rconfiguration\x12\x1b\n" +
+	"\tuser_data\x18\x03 \x01(\fR\buserData\x12#\n" +
+	"\roriginal_json\x18\x04 \x01(\fR\foriginalJson\x12\x1c\n" +
+	"\tsignature\x18\x05 \x01(\fR\tsignature\"f\n" +
+	"\vAzureCVMKey\x12\x10\n" +
+	"\x03kid\x18\x01 \x01(\tR\x03kid\x12\x17\n" +
+	"\akey_ops\x18\x02 \x03(\tR\x06keyOps\x12\x10\n" +
+	"\x03kty\x18\x03 \x01(\tR\x03kty\x12\f\n" +
+	"\x01e\x18\x04 \x01(\fR\x01e\x12\f\n" +
+	"\x01n\x18\x05 \x01(\fR\x01n\"\xfb\x01\n" +
+	"\x15AzureCVMConfiguration\x12'\n" +
+	"\x0fconsole_enabled\x18\x01 \x01(\bR\x0econsoleEnabled\x120\n" +
+	"\x14root_cert_thumbprint\x18\x02 \x01(\fR\x12rootCertThumbprint\x12\x1f\n" +
+	"\vsecure_boot\x18\x03 \x01(\bR\n" +
+	"secureBoot\x12\x1f\n" +
+	"\vtpm_enabled\x18\x04 \x01(\bR\n" +
+	"tpmEnabled\x12#\n" +
+	"\rtpm_persisted\x18\x05 \x01(\bR\ftpmPersisted\x12 \n" +
+	"\fvm_unique_id\x18\x06 \x01(\tR\n" +
+	"vmUniqueId*\xe3\x05\n" +
 	"\fEvidenceType\x12\x1d\n" +
 	"\x19EVIDENCE_TYPE_UNSPECIFIED\x10\x00\x12*\n" +
 	"&EVIDENCE_TYPE_TPM_CERTIFY_REK_CREATION\x10\x01\x12$\n" +
@@ -1180,36 +1812,42 @@ const file_evidence_proto_rawDesc = "" +
 	"\x1fEVIDENCE_TYPE_NVIDIA_SWITCH_ETA\x10\x0e\x128\n" +
 	"4EVIDENCE_TYPE_NVIDIA_SWITCH_INTERMEDIATE_CERTIFICATE\x10\x0f\x12(\n" +
 	"$EVIDENCE_TYPE_SEVSNP_EXTENDED_REPORT\x10\x10\x12 \n" +
-	"\x1cEVIDENCE_TYPE_AK_TPMT_PUBLIC\x10\x11B8Z.github.com/openpcc/openpcc/gen/protos/evidence\x92\x03\x05\xd2>\x02\x10\x03b\beditionsp\xe8\a"
+	"\x1cEVIDENCE_TYPE_AK_TPMT_PUBLIC\x10\x11\x12(\n" +
+	"$EVIDENCE_TYPE_AZURE_CVM_RUNTIME_DATA\x10\x12B8Z.github.com/openpcc/openpcc/gen/protos/evidence\x92\x03\x05\xd2>\x02\x10\x03b\beditionsp\xe8\a"
 
 var file_evidence_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_evidence_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
+var file_evidence_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
 var file_evidence_proto_goTypes = []any{
-	(EvidenceType)(0),           // 0: csprotos.EvidenceType
-	(*SignedEvidencePiece)(nil), // 1: csprotos.SignedEvidencePiece
-	(*SignedEvidenceList)(nil),  // 2: csprotos.SignedEvidenceList
-	(*PCRValues)(nil),           // 3: csprotos.PCRValues
-	(*TPMQuoteAttestation)(nil), // 4: csprotos.TPMQuoteAttestation
-	(*HeaderEntry)(nil),         // 5: csprotos.HeaderEntry
-	(*ResponseHeaders)(nil),     // 6: csprotos.ResponseHeaders
-	(*TDXCollateral)(nil),       // 7: csprotos.TDXCollateral
-	nil,                         // 8: csprotos.PCRValues.ValuesEntry
+	(EvidenceType)(0),             // 0: csprotos.EvidenceType
+	(*SignedEvidencePiece)(nil),   // 1: csprotos.SignedEvidencePiece
+	(*SignedEvidenceList)(nil),    // 2: csprotos.SignedEvidenceList
+	(*PCRValues)(nil),             // 3: csprotos.PCRValues
+	(*TPMQuoteAttestation)(nil),   // 4: csprotos.TPMQuoteAttestation
+	(*HeaderEntry)(nil),           // 5: csprotos.HeaderEntry
+	(*ResponseHeaders)(nil),       // 6: csprotos.ResponseHeaders
+	(*TDXCollateral)(nil),         // 7: csprotos.TDXCollateral
+	(*AzureCVMRuntimeData)(nil),   // 8: csprotos.AzureCVMRuntimeData
+	(*AzureCVMKey)(nil),           // 9: csprotos.AzureCVMKey
+	(*AzureCVMConfiguration)(nil), // 10: csprotos.AzureCVMConfiguration
+	nil,                           // 11: csprotos.PCRValues.ValuesEntry
 }
 var file_evidence_proto_depIdxs = []int32{
-	0, // 0: csprotos.SignedEvidencePiece.type:type_name -> csprotos.EvidenceType
-	1, // 1: csprotos.SignedEvidenceList.items:type_name -> csprotos.SignedEvidencePiece
-	8, // 2: csprotos.PCRValues.values:type_name -> csprotos.PCRValues.ValuesEntry
-	3, // 3: csprotos.TPMQuoteAttestation.pcrValues:type_name -> csprotos.PCRValues
-	5, // 4: csprotos.ResponseHeaders.entries:type_name -> csprotos.HeaderEntry
-	6, // 5: csprotos.TDXCollateral.pck_crl_headers:type_name -> csprotos.ResponseHeaders
-	6, // 6: csprotos.TDXCollateral.root_crl_headers:type_name -> csprotos.ResponseHeaders
-	6, // 7: csprotos.TDXCollateral.qe_headers:type_name -> csprotos.ResponseHeaders
-	6, // 8: csprotos.TDXCollateral.tcb_headers:type_name -> csprotos.ResponseHeaders
-	9, // [9:9] is the sub-list for method output_type
-	9, // [9:9] is the sub-list for method input_type
-	9, // [9:9] is the sub-list for extension type_name
-	9, // [9:9] is the sub-list for extension extendee
-	0, // [0:9] is the sub-list for field type_name
+	0,  // 0: csprotos.SignedEvidencePiece.type:type_name -> csprotos.EvidenceType
+	1,  // 1: csprotos.SignedEvidenceList.items:type_name -> csprotos.SignedEvidencePiece
+	11, // 2: csprotos.PCRValues.values:type_name -> csprotos.PCRValues.ValuesEntry
+	3,  // 3: csprotos.TPMQuoteAttestation.pcrValues:type_name -> csprotos.PCRValues
+	5,  // 4: csprotos.ResponseHeaders.entries:type_name -> csprotos.HeaderEntry
+	6,  // 5: csprotos.TDXCollateral.pck_crl_headers:type_name -> csprotos.ResponseHeaders
+	6,  // 6: csprotos.TDXCollateral.root_crl_headers:type_name -> csprotos.ResponseHeaders
+	6,  // 7: csprotos.TDXCollateral.qe_headers:type_name -> csprotos.ResponseHeaders
+	6,  // 8: csprotos.TDXCollateral.tcb_headers:type_name -> csprotos.ResponseHeaders
+	9,  // 9: csprotos.AzureCVMRuntimeData.keys:type_name -> csprotos.AzureCVMKey
+	10, // 10: csprotos.AzureCVMRuntimeData.configuration:type_name -> csprotos.AzureCVMConfiguration
+	11, // [11:11] is the sub-list for method output_type
+	11, // [11:11] is the sub-list for method input_type
+	11, // [11:11] is the sub-list for extension type_name
+	11, // [11:11] is the sub-list for extension extendee
+	0,  // [0:11] is the sub-list for field type_name
 }
 
 func init() { file_evidence_proto_init() }
@@ -1223,7 +1861,7 @@ func file_evidence_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_evidence_proto_rawDesc), len(file_evidence_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   8,
+			NumMessages:   11,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

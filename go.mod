@@ -15,6 +15,7 @@ require (
 	github.com/fatih/color v1.18.0
 	github.com/go-openapi/runtime v0.29.2
 	github.com/golang-jwt/jwt/v5 v5.3.0
+	github.com/google/go-cmp v0.7.0
 	github.com/google/go-eventlog v0.0.2
 	github.com/google/go-sev-guest v0.14.1
 	github.com/google/go-tdx-guest v0.3.2-0.20250814004405-ffb0869e6f4d
@@ -30,9 +31,9 @@ require (
 	github.com/labstack/echo/v4 v4.13.4
 	github.com/magefile/mage v1.15.0
 	github.com/neilotoole/slogt v1.1.0
-	github.com/openpcc/bhttp v0.0.37
-	github.com/openpcc/ohttp v0.0.37
-	github.com/openpcc/twoway v0.0.37
+	github.com/openpcc/bhttp v0.0.38
+	github.com/openpcc/ohttp v0.0.38
+	github.com/openpcc/twoway v0.0.38
 	github.com/pkg/errors v0.9.1
 	github.com/pressly/goose/v3 v3.26.0
 	github.com/quic-go/quic-go v0.56.0
@@ -117,7 +118,6 @@ require (
 	github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 // indirect
 	github.com/google/btree v1.1.3 // indirect
 	github.com/google/certificate-transparency-go v1.3.2 // indirect
-	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/go-configfs-tsm v0.3.3 // indirect
 	github.com/google/go-containerregistry v0.20.6 // indirect
 	github.com/google/logger v1.1.1 // indirect

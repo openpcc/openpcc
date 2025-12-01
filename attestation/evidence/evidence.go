@@ -17,10 +17,15 @@ package evidence
 import (
 	"bytes"
 	"crypto"
+	"crypto/rsa"
+	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"math/big"
 	"strings"
 
 	"github.com/cloudflare/circl/hpke"
@@ -77,6 +82,7 @@ const (
 	NvidiaSwitchIntermediateCertificate
 	SevSnpExtendedReport
 	AkTPMTPublic
+	AzureRuntimeData
 )
 
 func (s EvidenceType) String() string {
@@ -115,6 +121,8 @@ func (s EvidenceType) String() string {
 		return "SevSnpExtendedReport"
 	case AkTPMTPublic:
 		return "AkTPMTPublic"
+	case AzureRuntimeData:
+		return "AzureRuntimeData"
 	case EvidenceTypeUnspecified:
 		// for completeness, we must include unspecified. revive:useless-fallthrough triggers if there is no comment
 		fallthrough
@@ -167,6 +175,8 @@ func (s EvidenceType) MarshalProto() pb.EvidenceType {
 		return pb.EvidenceType_EVIDENCE_TYPE_SEVSNP_EXTENDED_REPORT
 	case AkTPMTPublic:
 		return pb.EvidenceType_EVIDENCE_TYPE_AK_TPMT_PUBLIC
+	case AzureRuntimeData:
+		return pb.EvidenceType_EVIDENCE_TYPE_AZURE_CVM_RUNTIME_DATA
 	case EvidenceTypeUnspecified:
 		// for completeness, we must include unspecified. revive:useless-fallthrough triggers if there is no comment
 		fallthrough
@@ -211,6 +221,8 @@ func (s *EvidenceType) UnmarshalProto(pbt pb.EvidenceType) error {
 		*s = SevSnpExtendedReport
 	case pb.EvidenceType_EVIDENCE_TYPE_AK_TPMT_PUBLIC:
 		*s = AkTPMTPublic
+	case pb.EvidenceType_EVIDENCE_TYPE_AZURE_CVM_RUNTIME_DATA:
+		*s = AzureRuntimeData
 	case pb.EvidenceType_EVIDENCE_TYPE_UNSPECIFIED:
 		// for completeness, we must include unspecified. revive:useless-fallthrough triggers if there is no comment
 		fallthrough
@@ -581,4 +593,183 @@ func FromResponseHeaders(msg *pb.ResponseHeaders) map[string][]string {
 	}
 
 	return result
+}
+
+// Custom types with their own unmarshaling logic
+type Base64Data []byte
+
+func (b *Base64Data) UnmarshalJSON(data []byte) error {
+	var s string
+	if err := json.Unmarshal(data, &s); err != nil {
+		return err
+	}
+	if s == "" {
+		*b = nil
+		return nil
+	}
+	decoded, err := base64.RawURLEncoding.DecodeString(s)
+	if err != nil {
+		return fmt.Errorf("failed to decode base64: %w", err)
+	}
+	*b = decoded
+	return nil
+}
+
+type HexData []byte
+
+func (h *HexData) UnmarshalJSON(data []byte) error {
+	var s string
+	if err := json.Unmarshal(data, &s); err != nil {
+		return err
+	}
+	if s == "" {
+		*h = nil
+		return nil
+	}
+	decoded, err := hex.DecodeString(s)
+	if err != nil {
+		return fmt.Errorf("failed to decode hex: %w", err)
+	}
+	*h = decoded
+	return nil
+}
+
+type AzureCVMRuntimeData struct {
+	Keys                  []*AzureCVMKey         `json:"keys"`
+	AzureCVMConfiguration *AzureCVMConfiguration `json:"vm-configuration"`
+	UserData              HexData                `json:"user-data"`
+	Signature             [32]byte
+	OriginalJSON          []byte
+}
+
+type AzureCVMKey struct {
+	Kid    string     `json:"kid"`
+	KeyOps []string   `json:"key_ops"`
+	Kty    string     `json:"kty"`
+	E      Base64Data `json:"e"`
+	N      Base64Data `json:"n"`
+}
+
+func (k *AzureCVMKey) ToPubKey() (*rsa.PublicKey, error) {
+	if k.Kty != "RSA" {
+		return nil, errors.New("not an RSA key")
+	}
+
+	return &rsa.PublicKey{
+		N: big.NewInt(0).SetBytes(k.N),
+		E: int(big.NewInt(0).SetBytes(k.E).Int64()),
+	}, nil
+}
+
+type AzureCVMConfiguration struct {
+	ConsoleEnabled     bool       `json:"console-enabled"`
+	RootCertThumbprint Base64Data `json:"root-cert-thumbprint"`
+	SecureBoot         bool       `json:"secure-boot"`
+	TpmEnabled         bool       `json:"tpm-enabled"`
+	TpmPersisted       bool       `json:"tpm-persisted"`
+	VmUniqueID         string     `json:"vmUniqueId"`
+}
+
+func (c *AzureCVMRuntimeData) MarshalProto() *pb.AzureCVMRuntimeData {
+	message := &pb.AzureCVMRuntimeData{}
+
+	pbKeys := []*pb.AzureCVMKey{}
+	for _, key := range c.Keys {
+		pbKeys = append(pbKeys, key.MarshalProto())
+	}
+
+	message.SetKeys(pbKeys)
+	message.SetConfiguration(c.AzureCVMConfiguration.MarshalProto())
+	message.SetOriginalJson(c.OriginalJSON)
+	message.SetSignature(c.Signature[:])
+	return message
+}
+
+func (c *AzureCVMRuntimeData) MarshalBinary() ([]byte, error) {
+	return proto.Marshal(c.MarshalProto())
+}
+
+func (c *AzureCVMRuntimeData) UnmarshalProto(runtimeDataProto *pb.AzureCVMRuntimeData) error {
+	config := &AzureCVMConfiguration{}
+	config.UnmarshalProto(runtimeDataProto.GetConfiguration())
+	c.AzureCVMConfiguration = config
+
+	keys := []*AzureCVMKey{}
+	for _, pbKey := range runtimeDataProto.GetKeys() {
+		key := &AzureCVMKey{}
+		key.UnmarshalProto(pbKey)
+		keys = append(keys, key)
+	}
+	c.Keys = keys
+	c.UserData = runtimeDataProto.GetUserData()
+
+	if c.UserData == nil {
+		// golang proto will deserialize an all null bytestring as nil, handle that case here
+		c.UserData = make([]byte, 64)
+	}
+	c.OriginalJSON = runtimeDataProto.GetOriginalJson()
+	c.Signature = [32]byte(runtimeDataProto.GetSignature())
+	return nil
+}
+
+func (c *AzureCVMConfiguration) UnmarshalProto(configProto *pb.AzureCVMConfiguration) error {
+	c.ConsoleEnabled = configProto.GetConsoleEnabled()
+	c.RootCertThumbprint = configProto.GetRootCertThumbprint()
+	c.SecureBoot = configProto.GetSecureBoot()
+	c.VmUniqueID = configProto.GetVmUniqueId()
+	c.TpmPersisted = configProto.GetTpmPersisted()
+	c.TpmEnabled = configProto.GetTpmEnabled()
+
+	return nil
+}
+
+func (c *AzureCVMKey) UnmarshalProto(keyProto *pb.AzureCVMKey) error {
+	c.E = keyProto.GetE()
+	c.N = keyProto.GetN()
+	c.KeyOps = keyProto.GetKeyOps()
+	c.Kid = keyProto.GetKid()
+	c.Kty = keyProto.GetKty()
+
+	return nil
+}
+
+func (c *AzureCVMRuntimeData) UnmarshalBinary(data []byte) error {
+	runtimeProto := &pb.AzureCVMRuntimeData{}
+	err := proto.Unmarshal(data, runtimeProto)
+	if err != nil {
+		return err
+	}
+	return c.UnmarshalProto(runtimeProto)
+}
+
+func (c *AzureCVMConfiguration) MarshalProto() *pb.AzureCVMConfiguration {
+	pbConfiguration := &pb.AzureCVMConfiguration{}
+	pbConfiguration.SetConsoleEnabled(c.ConsoleEnabled)
+	pbConfiguration.SetRootCertThumbprint(c.RootCertThumbprint)
+	pbConfiguration.SetSecureBoot(c.SecureBoot)
+	pbConfiguration.SetTpmEnabled(c.TpmEnabled)
+	pbConfiguration.SetTpmPersisted(c.TpmPersisted)
+	pbConfiguration.SetVmUniqueId(c.VmUniqueID)
+	return pbConfiguration
+}
+
+func (k *AzureCVMKey) MarshalProto() *pb.AzureCVMKey {
+	pbKey := &pb.AzureCVMKey{}
+	pbKey.SetE(k.E)
+	pbKey.SetN(k.N)
+	pbKey.SetKty(k.Kty)
+	pbKey.SetKid(k.Kid)
+	pbKey.SetKeyOps(k.KeyOps)
+	return pbKey
+}
+
+func (a *AzureCVMRuntimeData) UnmarshalJSON(data []byte) error {
+	a.OriginalJSON = data
+	a.Signature = sha256.Sum256(data)
+
+	// Define an alias to avoid infinite recursion
+	type Alias AzureCVMRuntimeData
+	aux := (*Alias)(a)
+
+	return json.Unmarshal(data, aux)
 }
