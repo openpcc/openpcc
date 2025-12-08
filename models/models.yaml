@@ -6,3 +6,5 @@
   context_length: 32_768
 - name: "gemma3:1b"
   context_length: 32_768
+- name: "qwen3-vl-30b-a3b-thinking"
+  context_length: 128_000
