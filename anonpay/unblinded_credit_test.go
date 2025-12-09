@@ -109,6 +109,12 @@ func Test_UnblindedCredit_MarshalUnmarshalProtobuf(t *testing.T) {
 		})
 	}
 
+	t.Run("fail, marshal nil credit", func(t *testing.T) {
+		var c *anonpay.UnblindedCredit
+		_, err := c.MarshalProto()
+		require.Error(t, err)
+	})
+
 	t.Run("fail, unmarshal nil", func(t *testing.T) {
 		c := &anonpay.UnblindedCredit{}
 		err := c.UnmarshalProto(nil)

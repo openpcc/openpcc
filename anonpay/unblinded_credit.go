@@ -73,6 +73,10 @@ func (c *UnblindedCredit) UnmarshalBinary(b []byte) error {
 }
 
 func (c *UnblindedCredit) MarshalProto() (*protos.Credit, error) {
+	if c == nil {
+		return nil, errors.New("nil credit")
+	}
+
 	pv, err := c.Value().MarshalProto()
 	if err != nil {
 		return nil, err

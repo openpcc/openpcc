@@ -36,23 +36,27 @@ type HTTPClient interface {
 	Do(req *http.Request) (*http.Response, error)
 }
 
+type BackoffFunc func() backoff.BackOff
+
 type Client struct {
-	httpClient     HTTPClient
-	baseURL        string
-	requestBackoff backoff.BackOff
+	httpClient  HTTPClient
+	baseURL     string
+	backoffFunc BackoffFunc
 }
 
 func NewClient(httpClient HTTPClient, baseURL string) *Client {
-	return NewClientWithBackoff(httpClient, baseURL, backoff.NewExponentialBackOff(
-		backoff.WithMaxElapsedTime(3*time.Minute),
-	))
+	return NewClientWithBackoff(httpClient, baseURL, func() backoff.BackOff {
+		return backoff.NewExponentialBackOff(
+			backoff.WithMaxElapsedTime(3 * time.Minute),
+		)
+	})
 }
 
-func NewClientWithBackoff(httpClient HTTPClient, baseURL string, b backoff.BackOff) *Client {
+func NewClientWithBackoff(httpClient HTTPClient, baseURL string, b BackoffFunc) *Client {
 	return &Client{
-		baseURL:        baseURL,
-		httpClient:     httpClient,
-		requestBackoff: b,
+		baseURL:     baseURL,
+		httpClient:  httpClient,
+		backoffFunc: b,
 	}
 }
 
@@ -126,7 +130,7 @@ func (c *Client) doRequest(ctx context.Context, endpoint string, reqPB proto.Mes
 		return fmt.Errorf("failed to create http request: %w", err)
 	}
 
-	resp, err := httpretry.DoWith(c.httpClient, req, c.requestBackoff, httpretry.Retry5xx)
+	resp, err := httpretry.DoWith(c.httpClient, req, c.backoffFunc(), httpretry.Retry5xx)
 	if err != nil {
 		return fmt.Errorf("http request failed: %w", err)
 	}

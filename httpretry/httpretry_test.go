@@ -31,7 +31,9 @@ import (
 )
 
 func TestDoFor(t *testing.T) {
-	testBackoff := backoff.NewExponentialBackOff(backoff.WithMaxElapsedTime(5 * time.Second))
+	testBackoffFunc := func() backoff.BackOff {
+		return backoff.NewExponentialBackOff(backoff.WithMaxElapsedTime(5 * time.Second))
+	}
 
 	newClient := func(_ *testing.T) (*http.Client, *countingTransport) {
 		transport := &countingTransport{}
@@ -64,7 +66,7 @@ func TestDoFor(t *testing.T) {
 			req, err := http.NewRequest(http.MethodGet, serverURL, nil)
 			require.NoError(t, err)
 
-			resp, err := httpretry.DoWith(httpClient, req, testBackoff, httpretry.Retry5xx)
+			resp, err := httpretry.DoWith(httpClient, req, testBackoffFunc(), httpretry.Retry5xx)
 			require.NoError(t, err)
 
 			require.Equal(t, resp.StatusCode, code)
@@ -93,7 +95,7 @@ func TestDoFor(t *testing.T) {
 		req, err := http.NewRequest(http.MethodGet, serverURL, nil)
 		require.NoError(t, err)
 
-		resp, err := httpretry.DoWith(httpClient, req, testBackoff, httpretry.Retry5xx)
+		resp, err := httpretry.DoWith(httpClient, req, testBackoffFunc(), httpretry.Retry5xx)
 		require.NoError(t, err)
 
 		require.Equal(t, resp.StatusCode, http.StatusInternalServerError)
@@ -124,7 +126,7 @@ func TestDoFor(t *testing.T) {
 		req, err := http.NewRequest(http.MethodPost, serverURL, mr)
 		require.NoError(t, err)
 
-		resp, err := httpretry.DoWith(httpClient, req, testBackoff, httpretry.Retry5xx)
+		resp, err := httpretry.DoWith(httpClient, req, testBackoffFunc(), httpretry.Retry5xx)
 		require.NoError(t, err)
 
 		require.Equal(t, resp.StatusCode, http.StatusInternalServerError)
@@ -145,7 +147,7 @@ func TestDoFor(t *testing.T) {
 		req, err := http.NewRequest(http.MethodGet, serverURL, nil)
 		require.NoError(t, err)
 
-		_, err = httpretry.DoWith(httpClient, req, testBackoff, httpretry.Retry5xx)
+		_, err = httpretry.DoWith(httpClient, req, testBackoffFunc(), httpretry.Retry5xx)
 		require.Error(t, err)
 
 		require.GreaterOrEqual(t, transport.calls.Load(), int64(2)) // want at least 2 calls.
@@ -161,7 +163,7 @@ func TestDoFor(t *testing.T) {
 		req, err := http.NewRequest(http.MethodGet, serverURL, nil)
 		require.NoError(t, err)
 
-		_, err = httpretry.DoWith(httpClient, req, testBackoff, httpretry.Retry5xx)
+		_, err = httpretry.DoWith(httpClient, req, testBackoffFunc(), httpretry.Retry5xx)
 		require.Error(t, err)
 
 		require.GreaterOrEqual(t, transport.calls.Load(), int64(1)) // want single call

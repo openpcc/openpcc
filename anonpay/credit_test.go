@@ -123,6 +123,12 @@ func TestCreditMarshalUnmarshalProtobuf(t *testing.T) {
 		})
 	}
 
+	t.Run("fail, marshal nil credit", func(t *testing.T) {
+		var c *anonpay.BlindedCredit
+		_, err := c.MarshalProto()
+		require.Error(t, err)
+	})
+
 	t.Run("fail, unmarshal nil", func(t *testing.T) {
 		c := &anonpay.BlindedCredit{}
 		err := c.UnmarshalProto(nil)

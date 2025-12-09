@@ -21,27 +21,31 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-type Client struct {
-	bankURL        string
-	httpClient     HTTPClient
-	requestBackoff backoff.BackOff
-}
-
 type HTTPClient interface {
 	Do(req *http.Request) (*http.Response, error)
 }
 
-func NewClient(httpClient HTTPClient, bankURL string) (*Client, error) {
-	return NewClientWithBackoff(httpClient, bankURL, backoff.NewExponentialBackOff(
-		backoff.WithMaxElapsedTime(10*time.Minute),
-	))
+type BackoffFunc func() backoff.BackOff
+
+type Client struct {
+	bankURL        string
+	httpClient     HTTPClient
+	reqBackoffFunc BackoffFunc
 }
 
-func NewClientWithBackoff(httpClient HTTPClient, bankURL string, backoff backoff.BackOff) (*Client, error) {
+func NewClient(httpClient HTTPClient, bankURL string) (*Client, error) {
+	return NewClientWithBackoff(httpClient, bankURL, func() backoff.BackOff {
+		return backoff.NewExponentialBackOff(
+			backoff.WithMaxElapsedTime(3 * time.Minute),
+		)
+	})
+}
+
+func NewClientWithBackoff(httpClient HTTPClient, bankURL string, backoffFunc BackoffFunc) (*Client, error) {
 	return &Client{
 		bankURL:        bankURL,
 		httpClient:     httpClient,
-		requestBackoff: backoff,
+		reqBackoffFunc: backoffFunc,
 	}, nil
 }
 
@@ -178,7 +182,7 @@ func (c *Client) doRequest(ctx context.Context, endpoint string, reqPB proto.Mes
 		return fmt.Errorf("failed to create http request: %w", err)
 	}
 
-	resp, err := httpretry.DoWith(c.httpClient, req, c.requestBackoff, httpretry.Retry5xx)
+	resp, err := httpretry.DoWith(c.httpClient, req, c.reqBackoffFunc(), httpretry.Retry5xx)
 	if err != nil {
 		return fmt.Errorf("http request failed: %w", err)
 	}

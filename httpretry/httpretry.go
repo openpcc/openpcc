@@ -31,10 +31,6 @@ import (
 
 var (
 	err500 = errors.New("500 status")
-	// DefaultBackoff is the default exponential backoff of 3 minutes.
-	DefaultBackoff = backoff.NewExponentialBackOff(
-		backoff.WithMaxElapsedTime(3 * time.Minute),
-	)
 )
 
 type HTTPDoer interface {
@@ -56,7 +52,10 @@ func Retry5xx(r *http.Response) (bool, error) {
 //
 // The body of the request is copied before any retries are made.
 func Do(c HTTPDoer, req *http.Request) (*http.Response, error) {
-	return DoWith(c, req, DefaultBackoff, Retry5xx)
+	boff := backoff.NewExponentialBackOff(
+		backoff.WithMaxElapsedTime(3 * time.Minute),
+	)
+	return DoWith(c, req, boff, Retry5xx)
 }
 
 // DoWith retries the given request until:
@@ -191,7 +190,6 @@ func newRewindableBody(orig io.ReadCloser) *rewindableBody {
 // Rewind waits for the body to be closed and rewinds the recorded body.
 func (c *rewindableBody) Rewind() error {
 	c.waitForOrigCloseOnce.Do(func() {
-		c.origClosed = true
 		c.origCloseErr = <-c.origCloseDone
 		c.recording = bytes.NewReader(c.buffer.Bytes())
 	})
@@ -228,5 +226,6 @@ func (c *rewindableBody) Close() error {
 	err := c.orig.Close()
 	c.origCloseDone <- err
 	close(c.origCloseDone)
+	c.origClosed = true
 	return err
 }

@@ -65,12 +65,14 @@ func DefaultConfig() Config {
 	}
 }
 
+type BackoffFunc func() backoff.BackOff
+
 type Client struct {
-	httpClient       *http.Client
-	creditReqBackoff backoff.BackOff
-	cfg              Config
-	remoteCfg        RemoteConfig
-	payee            *anonpay.Payee
+	httpClient           *http.Client
+	creditReqBackoffFunc BackoffFunc
+	cfg                  Config
+	remoteCfg            RemoteConfig
+	payee                *anonpay.Payee
 
 	badgeMu *sync.RWMutex
 	badge   *credentialing.Badge
@@ -101,9 +103,11 @@ func New(ctx context.Context, cfg Config, verifier TransparencyVerifier, httpCli
 		cfg:        cfg,
 		remoteCfg:  remoteCfg,
 		payee:      anonpay.NewPayee(currencyKey),
-		creditReqBackoff: backoff.NewExponentialBackOff(
-			backoff.WithMaxElapsedTime(cfg.CreditRequestMaxTimeout),
-		),
+		creditReqBackoffFunc: func() backoff.BackOff {
+			return backoff.NewExponentialBackOff(
+				backoff.WithMaxElapsedTime(cfg.CreditRequestMaxTimeout),
+			)
+		},
 		badgeMu: &sync.RWMutex{},
 	}, nil
 }
@@ -141,7 +145,7 @@ func (c *Client) doRetryingCreditRequest(ctx context.Context, value currency.Val
 		return nil, fmt.Errorf("error building blinded request: %w", err)
 	}
 
-	resp, err := httpretry.DoWith(c.httpClient, req, c.creditReqBackoff, func(rawResp *http.Response) (bool, error) {
+	resp, err := httpretry.DoWith(c.httpClient, req, c.creditReqBackoffFunc(), func(rawResp *http.Response) (bool, error) {
 		retry, err := httpretry.Retry5xx(rawResp)
 		if retry || err != nil {
 			return retry, err
@@ -279,7 +283,7 @@ func (c *Client) PutCredit(ctx context.Context, credit *anonpay.BlindedCredit) e
 		return fmt.Errorf("error building refund request: %w", err)
 	}
 
-	resp, err := httpretry.DoWith(c.httpClient, req, c.creditReqBackoff, httpretry.Retry5xx)
+	resp, err := httpretry.DoWith(c.httpClient, req, c.creditReqBackoffFunc(), httpretry.Retry5xx)
 	if err != nil {
 		return fmt.Errorf("error sending refund: %w", err)
 	}

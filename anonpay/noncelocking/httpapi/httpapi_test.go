@@ -42,7 +42,9 @@ func TestContract(t *testing.T) {
 			srv.Close()
 		})
 
-		return httpapi.NewClientWithBackoff(httpClient, srv.URL, &backoff.StopBackOff{}),
+		return httpapi.NewClientWithBackoff(httpClient, srv.URL, func() backoff.BackOff {
+				return &backoff.StopBackOff{}
+			}),
 			anonpay.NonceLifespanSeconds * time.Second,
 			nil
 	})
