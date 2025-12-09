@@ -20,6 +20,7 @@ import (
 	_ "embed"
 	"errors"
 	"fmt"
+	"log/slog"
 
 	"github.com/golang-jwt/jwt/v5"
 )
@@ -53,6 +54,11 @@ func (v *NRASVerifier) VerifyJWT(signedToken string) (*jwt.Token, error) {
 	parsed, err := jwt.Parse(signedToken, func(_ *jwt.Token) (any, error) {
 		return publicKey, nil
 	}, jwt.WithoutClaimsValidation(), jwt.WithValidMethods([]string{"ES384"}))
+	if parsed != nil && parsed.Claims != nil {
+		if c, ok := parsed.Claims.(jwt.MapClaims); ok {
+			slog.Info("NRAS JWT", "nbf", c["nbf"], "exp", c["exp"], "err", err)
+		}
+	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse the JWT: %w", err)
 	}

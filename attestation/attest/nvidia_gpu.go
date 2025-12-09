@@ -54,6 +54,7 @@ func (a *NVidiaAttestor) CreateSignedEvidence(ctx context.Context) (*evidence.Si
 
 	var err error
 	a.AttestationResult, err = a.Provider.Attest(ctx, a.Nonce)
+	slog.Info("attestation result", "result", a.AttestationResult)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get remote evidence: %w", err)
 	}

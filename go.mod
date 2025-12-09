@@ -10,7 +10,7 @@ require (
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/cenkalti/backoff/v5 v5.0.3
 	github.com/cloudflare/circl v1.6.1
-	github.com/confidentsecurity/go-nvtrust v0.2.1
+	github.com/confidentsecurity/go-nvtrust v0.2.2
 	github.com/exaring/otelpgx v0.9.3
 	github.com/fatih/color v1.18.0
 	github.com/go-openapi/runtime v0.29.2
@@ -31,9 +31,9 @@ require (
 	github.com/labstack/echo/v4 v4.13.4
 	github.com/magefile/mage v1.15.0
 	github.com/neilotoole/slogt v1.1.0
-	github.com/openpcc/bhttp v0.0.66
-	github.com/openpcc/ohttp v0.0.66
-	github.com/openpcc/twoway v0.0.66
+	github.com/openpcc/bhttp v0.0.67
+	github.com/openpcc/ohttp v0.0.67
+	github.com/openpcc/twoway v0.0.67
 	github.com/pkg/errors v0.9.1
 	github.com/pressly/goose/v3 v3.26.0
 	github.com/quic-go/quic-go v0.56.0
