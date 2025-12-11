@@ -2,6 +2,12 @@ module github.com/openpcc/openpcc
 
 go 1.25.4
 
+replace (
+	github.com/openpcc/bhttp => ../bhttp
+	github.com/openpcc/ohttp => ../ohttp
+	github.com/openpcc/twoway => ../twoway
+)
+
 require (
 	github.com/MicahParks/jwkset v0.11.0
 	github.com/allaboutapps/integresql-client-go v1.0.0
@@ -31,9 +37,10 @@ require (
 	github.com/labstack/echo/v4 v4.13.4
 	github.com/magefile/mage v1.15.0
 	github.com/neilotoole/slogt v1.1.0
-	github.com/openpcc/bhttp v0.0.72
-	github.com/openpcc/ohttp v0.0.72
-	github.com/openpcc/twoway v0.0.72
+	github.com/openai/openai-go/v3 v3.8.1
+	github.com/openpcc/bhttp v0.0.0-00010101000000-000000000000
+	github.com/openpcc/ohttp v0.0.0-00010101000000-000000000000
+	github.com/openpcc/twoway v0.0.0-00010101000000-000000000000
 	github.com/pkg/errors v0.9.1
 	github.com/pressly/goose/v3 v3.26.0
 	github.com/quic-go/quic-go v0.56.0
@@ -165,6 +172,10 @@ require (
 	github.com/spf13/pflag v1.0.10 // indirect
 	github.com/spiffe/go-spiffe/v2 v2.6.0 // indirect
 	github.com/theupdateframework/go-tuf v0.7.0 // indirect
+	github.com/tidwall/gjson v1.18.0 // indirect
+	github.com/tidwall/match v1.2.0 // indirect
+	github.com/tidwall/pretty v1.2.1 // indirect
+	github.com/tidwall/sjson v1.2.5 // indirect
 	github.com/transparency-dev/formats v0.0.0-20251110090430-df1ffe27d819 // indirect
 	github.com/transparency-dev/merkle v0.0.2 // indirect
 	github.com/transparency-dev/tessera v1.0.0 // indirect

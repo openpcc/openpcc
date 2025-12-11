@@ -15,7 +15,10 @@
 package openpcc
 
 import (
+	"fmt"
 	"net/http"
+
+	"github.com/openpcc/openpcc/transparency"
 )
 
 type scratch struct {
@@ -92,6 +95,44 @@ func WithNodeTags(tags []string) Option {
 func WithMaxCandidateNodes(maxCandidates int) Option {
 	return func(c *Client, _ *scratch, _ *Config) error {
 		c.maxCandidateNodes = maxCandidates
+		return nil
+	}
+}
+
+func WithTransparencyOIDCIssuer(issuer string) Option {
+	return func(c *Client, s *scratch, config *Config) error {
+		config.TransparencyIdentityPolicy.OIDCIssuer = issuer
+		return nil
+	}
+}
+
+func WithTransparencyOIDCIssuerRegex(regex string) Option {
+	return func(c *Client, s *scratch, config *Config) error {
+		config.TransparencyIdentityPolicy.OIDCIssuerRegex = regex
+		return nil
+	}
+}
+
+func WithTransparencyOIDCSubject(subject string) Option {
+	return func(c *Client, s *scratch, config *Config) error {
+		config.TransparencyIdentityPolicy.OIDCSubject = subject
+		return nil
+	}
+}
+
+func WithTransparencyOIDCSubjectRegex(regex string) Option {
+	return func(c *Client, s *scratch, config *Config) error {
+		config.TransparencyIdentityPolicy.OIDCSubjectRegex = regex
+		return nil
+	}
+}
+
+func WithTransparencyEnvironment(environment string) Option {
+	return func(c *Client, s *scratch, config *Config) error {
+		if environment != transparency.EnvironmentProd && environment != transparency.EnvironmentStaging {
+			return fmt.Errorf("invalid transparency environment: %s", environment)
+		}
+		config.TransparencyVerifier.Environment = transparency.Environment(environment)
 		return nil
 	}
 }
