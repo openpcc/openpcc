@@ -28,16 +28,29 @@ func GetIntermediateCert(signedEvidencePiece *ev.SignedEvidencePiece) (*x509.Cer
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse intermediate certificate: %w", err)
 	}
-	block, _ := pem.Decode(NRASRootCert)
-	if block == nil {
-		return nil, errors.New("failed to parse PEM block containing the root certificate")
-	}
-	rootCert, err := x509.ParseCertificate(block.Bytes)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse root certificate: %w", err)
+
+	// Parse multiple PEM certificates
+	rootCerts := []*x509.Certificate{}
+	remaining := NRASRootCert
+
+	for len(remaining) > 0 {
+		block, rest := pem.Decode(remaining)
+		if block == nil {
+			break
+		}
+
+		rootCert, err := x509.ParseCertificate(block.Bytes)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse root certificate: %w", err)
+		}
+
+		rootCerts = append(rootCerts, rootCert)
+		remaining = rest
 	}
 
-	rootCerts := []*x509.Certificate{rootCert}
+	if len(rootCerts) == 0 {
+		return nil, errors.New("failed to parse PEM block containing root certificates")
+	}
 
 	err = verifyIntermediateCert(
 		intermediateCert,
