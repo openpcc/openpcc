@@ -151,7 +151,7 @@ func NewWalletSteps(s *WalletSteps) []work.PipelineStep {
 		SourceAmount:                 s.SourceAmount,
 		MaxParallelSourceAccounts:    s.MaxParallelSourceAccounts,
 		EmptyBankAccountFunc:         s.AccountFunc,
-		InputSignal:                  s.InputSignal,
+		InputDoneSignal:              s.InputSignal,
 		InputAccounts:                accountsToProvide.ReceiveCh,
 		OutputFullAccountsToWithdraw: fullAccountsToWithdraw,
 		OutputAccountsToSource:       accountsToSource,

@@ -16,6 +16,7 @@ package wallet
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -38,52 +39,63 @@ type payment struct {
 	completed bool
 }
 
-func (w *Wallet) beginPaymentForRequest(ctx context.Context, req *transfer.PaymentRequest) (*payment, error) {
+func (w *Wallet) paymentFromResponse(resp transfer.PaymentResponse) (*payment, error) {
+	if resp.Err != nil {
+		if errors.Is(resp.Err, transfer.ErrPaymentRequestNoWorker) {
+			// if the worker is not available, that means we're in the process of shutting down.
+			return nil, context.Cause(w.lifecycleCtx)
+		}
+		return nil, resp.Err
+	}
 	p := &payment{
 		mu:        &sync.Mutex{},
 		w:         w,
-		credit:    nil,
+		credit:    resp.Credit,
 		completed: false,
 	}
+	w.openPaymentsWG.Add(1)
+	return p, nil
+}
+
+func (w *Wallet) waitForPipelineResponse(ctx context.Context, req *transfer.PaymentRequest) (*payment, error) {
+	w.openResponsesWG.Add(1)
+	defer w.openResponsesWG.Done()
 
 	ch := req.Response()
 	timer := time.NewTimer(time.Millisecond)
 	defer timer.Stop()
 	select {
 	case <-ctx.Done():
-		// ensure the result of this payment request gets returned to the pipeline.
-		go p.waitForDanglingResponse(ch)
+		// the context was cancelled, but a response might still happen. ensure
+		// the result of this payment request gets returned to the pipeline.
+		go w.waitForDanglingResponse(ch)
 		return nil, ctx.Err()
 	case resp := <-ch:
-		if resp.Err != nil {
-			return nil, resp.Err
-		}
-		p.credit = resp.Credit
-		return p, nil
+		return w.paymentFromResponse(resp)
 	case <-timer.C:
 		slog.Warn("Could not immediately begin payment. Consider increasing concurrent_requests_target")
 		select {
 		case <-ctx.Done():
-			// ensure the result of this payment request gets returned to the pipeline.
-			go p.waitForDanglingResponse(ch)
+			// the context was cancelled, but a response might still happen. ensure
+			// the result of this payment request gets returned to the pipeline.
+			go w.waitForDanglingResponse(ch)
 			return nil, ctx.Err()
 		case resp := <-ch:
-			if resp.Err != nil {
-				return nil, resp.Err
-			}
-			p.credit = resp.Credit
-			return p, nil
+			return w.paymentFromResponse(resp)
 		}
 	}
 }
 
-func (p *payment) waitForDanglingResponse(ch <-chan transfer.PaymentResponse) {
+func (w *Wallet) waitForDanglingResponse(ch <-chan transfer.PaymentResponse) {
 	resp := <-ch
-	if resp.Err != nil {
+	p, err := w.paymentFromResponse(resp)
+	if err != nil {
+		//  no payment from response, nothing the user could have done or needs to do.
 		return
 	}
-	p.credit = resp.Credit
-	err := p.Cancel()
+
+	// mark the payment as complete.
+	err = p.Cancel()
 	if err != nil {
 		// shouldn't really happen as it indicates that the response for a cancelled
 		// payment request contained an invalid credit.
@@ -93,7 +105,7 @@ func (p *payment) waitForDanglingResponse(ch <-chan transfer.PaymentResponse) {
 
 func (p *payment) complete(hasUnspend bool, unspend anonpay.AnyCredit) error {
 	// mark the payment as done so the wallet can close.
-	defer p.w.paymentsWG.Done()
+	defer p.w.openPaymentsWG.Done()
 	if !hasUnspend {
 		return nil
 	}

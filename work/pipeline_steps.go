@@ -21,111 +21,6 @@ import (
 	"sync"
 )
 
-// SerialStep is a pipeline step that receives an input,
-// executes a function with it, then finally sends the result to output.
-//
-// Inputs and outputs are processed one after the other. The order of outputs
-// will match order of Func invocations.
-type SerialStep[In, Out any] struct {
-	ID     string
-	Func   func(ctx context.Context, val In) (Out, error)
-	Input  <-chan In
-	Output *Channel[Out]
-	// RemainingInput is called when the step failed to produce or send an output for an input.
-	RemainingInput func(in In, err error)
-}
-
-func NewSyncStep[In, Out any](s *SerialStep[In, Out]) PipelineStep {
-	MustHaveInput(s.ID, s.Input)
-	MustHaveOutput[Out](s.ID, s.Output)
-	return PipelineStep{
-		ID:      s.ID,
-		Outputs: StepOutputs(s.Output),
-		Func: func(ctx context.Context) error {
-			for {
-				in, err := ReceiveInput(ctx, s.Input)
-				if err != nil {
-					return DropErrInputClosed(err)
-				}
-				out, err := s.Func(ctx, in)
-				if err != nil {
-					err = fmt.Errorf("func failed: %w", err)
-					if s.RemainingInput != nil {
-						s.RemainingInput(in, err)
-					}
-					return err
-				}
-
-				err = s.Output.Send(ctx, out)
-				if err != nil {
-					err = fmt.Errorf("failed to send output: %w", err)
-					if s.RemainingInput != nil {
-						s.RemainingInput(in, err)
-					}
-					return err
-				}
-			}
-		},
-	}
-}
-
-type SyncStepOut[T any] struct {
-	ID     string
-	Func   func(ctx context.Context) (T, error)
-	Output *Channel[T]
-}
-
-func NewSyncStepOut[T any](s *SyncStepOut[T]) PipelineStep {
-	MustHaveOutput[T](s.ID, s.Output)
-	return PipelineStep{
-		ID:      s.ID,
-		Outputs: StepOutputs(s.Output),
-		Func: func(ctx context.Context) error {
-			for {
-				val, err := s.Func(ctx)
-				if err != nil {
-					return fmt.Errorf("step failed: %w", err)
-				}
-
-				err = s.Output.Send(ctx, val)
-				if err != nil {
-					return fmt.Errorf("failed to send output: %w", err)
-				}
-			}
-		},
-	}
-}
-
-type SyncStepIn[T any] struct {
-	ID    string
-	Func  func(ctx context.Context, val T) error
-	Input <-chan T
-}
-
-func NewSyncStepIn[T any](s *SyncStepIn[T]) PipelineStep {
-	MustHaveInput(s.ID, s.Input)
-	return PipelineStep{
-		ID: s.ID,
-		Func: func(ctx context.Context) error {
-			for {
-				val, err := ReceiveInput(ctx, s.Input)
-				if err != nil {
-					return DropErrInputClosed(err)
-				}
-
-				if s.Func == nil {
-					continue
-				}
-
-				err = s.Func(ctx, val)
-				if err != nil {
-					return fmt.Errorf("step failed: %w", err)
-				}
-			}
-		},
-	}
-}
-
 // ParallelStep receives inputs, runs functions in parallel and sends outputs.
 //
 // There is no guarantee to the order of outputs.
@@ -136,16 +31,21 @@ type ParallelStep[In, Out any] struct {
 	Func        func(ctx context.Context, val In) (Out, error)
 	Input       <-chan In
 	Output      *Channel[Out]
-	// RemainingInput is called when the step failed to produce or send an output for an input.
-	RemainingInput func(in In, err error)
+	// DrainInputFunc is called for inputs for which no jobs were ever executed,
+	// or for which the executed job failed, in which case the error is non-nil.
+	DrainInputFunc func(in In, jobErr error)
 }
 
 func NewParallelStep[In, Out any](s *ParallelStep[In, Out]) PipelineStep {
 	MustHaveInput(s.ID, s.Input)
+
+	// shared between funcs
+	input := s.Input
+
 	return PipelineStep{
 		ID:      s.ID,
 		Outputs: StepOutputs(s.Output),
-		Func: func(stepCtx context.Context) error {
+		FuncWithCleanup: func(stepCtx context.Context) (CleanupFunc, error) {
 			type result struct {
 				jobID       int64
 				remainingIn *In
@@ -177,7 +77,7 @@ func NewParallelStep[In, Out any](s *ParallelStep[In, Out]) PipelineStep {
 					// receive an input.
 					in, err := ReceiveInput(ctx, s.Input)
 					if err != nil {
-						results <- result{jobID: i, err: DropErrInputClosed(err)}
+						results <- result{jobID: i, err: err}
 						return
 					}
 
@@ -205,14 +105,21 @@ func NewParallelStep[In, Out any](s *ParallelStep[In, Out]) PipelineStep {
 			var err error
 			for result := range results {
 				if result.err != nil {
-					result.err = fmt.Errorf("job %d failed: %w", result.jobID, result.err)
+					if errors.Is(result.err, ErrInputClosed) {
+						result.err = nil
+						input = nil
+					} else {
+						result.err = fmt.Errorf("job %d failed: %w", result.jobID, result.err)
+					}
 				}
 
-				if s.RemainingInput != nil && result.remainingIn != nil {
-					s.RemainingInput(*result.remainingIn, result.err)
+				if s.DrainInputFunc != nil && result.remainingIn != nil {
+					s.DrainInputFunc(*result.remainingIn, result.err)
 				}
 
 				if result.err != nil {
+					// irrecoverable error, continue processing remaining results and then
+					// return with error to iniatie pipeline shutdown.
 					err = errors.Join(err, result.err)
 					select {
 					case <-slots:
@@ -222,11 +129,7 @@ func NewParallelStep[In, Out any](s *ParallelStep[In, Out]) PipelineStep {
 				}
 
 				if result.output != nil && s.Output != nil {
-					sendErr := s.Output.Send(stepCtx, *result.output)
-					if err != nil {
-						err = errors.Join(err, sendErr)
-						continue
-					}
+					s.Output.SendCh <- *result.output
 				}
 
 				// open up a new slot if possible.
@@ -236,7 +139,14 @@ func NewParallelStep[In, Out any](s *ParallelStep[In, Out]) PipelineStep {
 				}
 			}
 
-			return err
+			return CleanupFunc(func() {
+				// Invoked after cancellation signals have been send,
+				DrainInput(input, func(in In) {
+					if s.DrainInputFunc != nil {
+						s.DrainInputFunc(in, nil)
+					}
+				})
+			}), err
 		},
 	}
 }

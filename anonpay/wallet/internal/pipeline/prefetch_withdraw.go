@@ -16,11 +16,11 @@ package pipeline
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"time"
 
+	"github.com/openpcc/openpcc/anonpay"
 	"github.com/openpcc/openpcc/anonpay/currency"
 	"github.com/openpcc/openpcc/anonpay/wallet/internal/stats"
 	"github.com/openpcc/openpcc/anonpay/wallet/internal/transfer"
@@ -49,6 +49,7 @@ type PrefetchWithdrawSteps struct {
 	PrefetchAmount                 currency.Value
 	InputRequests                  <-chan *transfer.PaymentRequest
 	InputAccounts                  <-chan *transfer.Account
+	CacheEvictSignalFunc           func(expiresAt time.Time) <-chan time.Time
 	OutputBankBatchesToConsolidate *work.Channel[*transfer.BankBatch]
 	OutputAccountsToConsolidate    *work.Channel[*transfer.Account]
 }
@@ -66,15 +67,14 @@ func NewPrefetchWithdrawSteps(s *PrefetchWithdrawSteps) []work.PipelineStep {
 	steps.add(work.PipelineStep{
 		ID:      s.ID + ".FilterLowAccounts",
 		Outputs: work.StepOutputs(fullAccounts, s.OutputAccountsToConsolidate),
-		Func: func(ctx context.Context) error {
+		Func: func() {
 			for {
 				// Low accounts really shouldn't arrive here, but filter them out just in case.
-				acc, err := work.ReceiveInput(ctx, s.InputAccounts)
-				if err != nil {
-					return work.DropErrInputClosed(err)
+				acc, ok := <-s.InputAccounts
+				if !ok {
+					break
 				}
 
-				out := fullAccounts
 				if acc.Balance() < s.PrefetchAmount.AmountOrZero() {
 					// log a warning if this happens.
 					slog.Warn(
@@ -82,11 +82,9 @@ func NewPrefetchWithdrawSteps(s *PrefetchWithdrawSteps) []work.PipelineStep {
 						"balance", acc.Balance(),
 						"prefetch_amount", s.PrefetchAmount.AmountOrZero(),
 					)
-					out = s.OutputAccountsToConsolidate
-				}
-				err = out.Send(ctx, acc)
-				if err != nil {
-					return fmt.Errorf("failed to send to output: %w", err)
+					s.OutputAccountsToConsolidate.SendCh <- acc
+				} else {
+					fullAccounts.SendCh <- acc
 				}
 			}
 		},
@@ -126,6 +124,17 @@ func NewPrefetchWithdrawSteps(s *PrefetchWithdrawSteps) []work.PipelineStep {
 		DrainWithdrawables:  s.OutputAccountsToConsolidate,
 	})...)
 
+	evictSignalFunc := func(expiresAt time.Time) <-chan time.Time {
+		expiresIn := time.Until(expiresAt) + time.Second*anonpay.NonceLifespanSeconds
+		evictFromCacheIn := expiresIn - s.MaxExpiryDuration
+		expirationTimer := time.NewTimer(evictFromCacheIn)
+		return expirationTimer.C
+	}
+
+	if s.CacheEvictSignalFunc != nil {
+		evictSignalFunc = s.CacheEvictSignalFunc
+	}
+
 	// create an intent for each credit in a bank batch. These intents will be part of a group
 	// per bank batch and will be collected
 	// create an intent for each credit in the bank batch by repeating the same bank batch for each credit.
@@ -134,19 +143,17 @@ func NewPrefetchWithdrawSteps(s *PrefetchWithdrawSteps) []work.PipelineStep {
 	steps.add(work.PipelineStep{
 		ID:      s.ID + ".CreateIntents",
 		Outputs: work.StepOutputs(intents, remainingBatchReps),
-		Func: func(ctx context.Context) error {
+		Func: func() {
 			// TODO: If the lock on the batches becomes problematic,
 			// pull up to MaxParallelBankBatches batches into this step and cycle through them.
 			inReqs := s.InputRequests
 			inBatches := bankBatches.ReceiveCh
+
 			for inReqs != nil && inBatches != nil {
-				batch, err := work.ReceiveInput(ctx, bankBatches.ReceiveCh)
-				if err != nil {
-					if errors.Is(err, work.ErrInputClosed) {
-						inBatches = nil
-						break
-					}
-					return err
+				batch, ok := <-inBatches
+				if !ok {
+					inBatches = nil
+					break
 				}
 
 				origNumCredits := batch.NumCredits()
@@ -159,8 +166,7 @@ func NewPrefetchWithdrawSteps(s *PrefetchWithdrawSteps) []work.PipelineStep {
 				// bank batches can expiry while they are in memory. Send them to consolidate before this
 				// happens. Assumes that bank batches are roughly received in time order, which should be
 				// the case.
-				expiresIn := batch.ExpiresIn() - s.MaxExpiryDuration
-				expirationTimer := time.NewTimer(expiresIn)
+				evictSignal := evictSignalFunc(batch.ExpiresAt())
 
 				// send an intent for each received payment request until payment requests is closed,
 				// or the bank batche expires.
@@ -170,9 +176,8 @@ func NewPrefetchWithdrawSteps(s *PrefetchWithdrawSteps) []work.PipelineStep {
 						ok  bool
 					)
 					select {
-					case <-ctx.Done():
-						return ctx.Err()
-					case <-expirationTimer.C:
+					case <-evictSignal:
+						// req = nil
 					case req, ok = <-inReqs:
 						if !ok {
 							inReqs = nil
@@ -185,78 +190,41 @@ func NewPrefetchWithdrawSteps(s *PrefetchWithdrawSteps) []work.PipelineStep {
 					}
 
 					rep.Last = rep.Index == origNumCredits-1
-					err := intents.Send(ctx, &transfer.Intent[transfer.RepWithdrawable[*transfer.BankBatch], *transfer.PaymentRequest]{
+					intents.SendCh <- &transfer.Intent[transfer.RepWithdrawable[*transfer.BankBatch], *transfer.PaymentRequest]{
 						Withdrawal: transfer.Withdrawal{
 							Credits: 1,
 							Amount:  req.DesiredAmount(),
 						},
 						From: rep,
 						To:   req,
-					})
-					if err != nil {
-						return fmt.Errorf("failed to send output: %w", err)
 					}
 				}
 
 				// it could be that we broke from the loop early. Check if we need to output a last rep.
 				if !rep.Last {
 					rep.Last = true
-					err := remainingBatchReps.Send(ctx, rep)
-					if err != nil {
-						return fmt.Errorf("failed to send output: %w", err)
-					}
+					remainingBatchReps.SendCh <- rep
 				}
 			}
 
+			// either inBatches or inReqs is nil at this point.
+
 			// send any remaning batches as single-element repetitions.
 			if inBatches != nil {
-				for {
-					var (
-						batch *transfer.BankBatch
-						ok    bool
-					)
-					select {
-					case batch, ok = <-inBatches:
-					case <-ctx.Done():
-						return fmt.Errorf("failed to receive bank batch: %w", ctx.Err())
-					}
-					if !ok {
-						break
-					}
-
-					rep := transfer.RepWithdrawable[*transfer.BankBatch]{
+				for batch := range inBatches {
+					remainingBatchReps.SendCh <- transfer.RepWithdrawable[*transfer.BankBatch]{
 						W:     batch,
 						Index: 0,
 						Last:  true,
 					}
-					err := remainingBatchReps.Send(ctx, rep)
-					if err != nil {
-						return fmt.Errorf("failed to send output: %w", err)
-					}
 				}
 			}
 
-			// fail any remaining requests. Shouldn't happen as long as the wallet shuts down properly.
 			if inReqs != nil {
-				for {
-					var (
-						req *transfer.PaymentRequest
-						ok  bool
-					)
-					select {
-					case req, ok = <-inReqs:
-					case <-ctx.Done():
-						return fmt.Errorf("failed to receive payment request: %w", ctx.Err())
-					}
-					if !ok {
-						break
-					}
-
-					req.Fail(errors.New("no credits available, wallet is shutting down"))
+				for inReq := range inReqs {
+					inReq.FailNoWorker()
 				}
 			}
-
-			return nil
 		},
 	})
 
@@ -276,10 +244,11 @@ func NewPrefetchWithdrawSteps(s *PrefetchWithdrawSteps) []work.PipelineStep {
 	steps.add(work.PipelineStep{
 		ID:      s.ID + ".DedupeBatches",
 		Outputs: work.StepOutputs(s.OutputBankBatchesToConsolidate),
-		Func: func(ctx context.Context) error {
+		Func: func() {
 			resultsByBatch := map[*transfer.BankBatch]*transfer.RepResults{}
 			inRemaining := remainingBatchReps.ReceiveCh
 			inTransfers := transfers.ReceiveCh
+
 			for {
 				var (
 					rep  transfer.RepWithdrawable[*transfer.BankBatch]
@@ -287,8 +256,6 @@ func NewPrefetchWithdrawSteps(s *PrefetchWithdrawSteps) []work.PipelineStep {
 					ok   bool
 				)
 				select {
-				case <-ctx.Done():
-					return ctx.Err()
 				case rep, ok = <-inRemaining:
 					if !ok {
 						inRemaining = nil
@@ -302,10 +269,13 @@ func NewPrefetchWithdrawSteps(s *PrefetchWithdrawSteps) []work.PipelineStep {
 				}
 
 				if inRemaining == nil && inTransfers == nil {
+					// no input left
 					break
 				}
 
 				if !ok {
+					// one of the inputs was closed, we don't have a rep,
+					// continue with the next one.
 					continue
 				}
 
@@ -323,10 +293,7 @@ func NewPrefetchWithdrawSteps(s *PrefetchWithdrawSteps) []work.PipelineStep {
 				// remaining.
 				delete(resultsByBatch, rep.W)
 				if rep.W.NumCredits() > 0 {
-					err := s.OutputBankBatchesToConsolidate.Send(ctx, rep.W)
-					if err != nil {
-						return fmt.Errorf("failed to send output: %w", err)
-					}
+					s.OutputBankBatchesToConsolidate.SendCh <- rep.W
 				}
 			}
 			if len(resultsByBatch) > 0 {
@@ -337,14 +304,10 @@ func NewPrefetchWithdrawSteps(s *PrefetchWithdrawSteps) []work.PipelineStep {
 						slog.Error("cleaning up incomplete bank batch")
 					}
 					if to.NumCredits() > 0 {
-						err := s.OutputBankBatchesToConsolidate.Send(ctx, to)
-						if err != nil {
-							return fmt.Errorf("failed to send output: %w", err)
-						}
+						s.OutputBankBatchesToConsolidate.SendCh <- to
 					}
 				}
 			}
-			return nil
 		},
 	})
 

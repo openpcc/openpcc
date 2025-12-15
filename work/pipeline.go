@@ -50,9 +50,43 @@ type PipelineStep struct {
 	// are not managed directly by a pipeline. Steps should still honor such cancellation signals.
 	ReceivePipelineCancellation bool
 
-	// Func is the function that will be ran by the pipeline. If Func returns an error, the
-	// pipeline will be closed.
-	Func func(ctx context.Context) error
+	// Func is a function that will be ran by the pipeline and does the work for this step. Useful
+	// for steps that don't have any logic that can error. These steps usually process inputs and
+	// return outputs until the input is closed.
+	//
+	// Only one of [Func], [FuncWithError] or [FuncWithCleanup] may be provided.
+	Func func()
+
+	// FuncWithError is similar to [Func] but may return an error. If FuncWithError returns an error, the
+	// pipeline will broadcast cancellation signals and begin closing.
+	//
+	// Only one of [Func], [FuncWithError] or [FuncWithCleanup] may be provided.
+	FuncWithError func(ctx context.Context) error
+
+	// FuncWithCleanup does the same as [ErrorFunc] but an optional cleanup func may be returned which
+	// will be invoked after any cancellation signals habe been send, but before the outputs have been closed.
+	//
+	// Useful for draining inputs, which usually needs to happen after cancellation signals have
+	// been send.
+	//
+	// Only one of [Func], [ErrorFunc] or [FuncWithCleanup] may be provided.
+	FuncWithCleanup func(ctx context.Context) (CleanupFunc, error)
+}
+
+type CleanupFunc func()
+
+// runFunc runs the one func that is set.
+func (s *PipelineStep) runFunc(ctx context.Context) (CleanupFunc, error) {
+	if s.Func != nil {
+		s.Func()
+		return nil, nil
+	}
+
+	if s.FuncWithError != nil {
+		return nil, s.FuncWithError(ctx)
+	}
+
+	return s.FuncWithCleanup(ctx)
 }
 
 type PipelineStepError struct {
@@ -121,8 +155,21 @@ func RunPipeline(ctx context.Context, steps ...PipelineStep) (*Pipeline, error) 
 			return nil, fmt.Errorf("duplicate step id %s at index %d", s.ID, i)
 		}
 
-		if s.Func == nil {
+		funcs := 0
+		if s.Func != nil {
+			funcs++
+		}
+		if s.FuncWithError != nil {
+			funcs++
+		}
+		if s.FuncWithCleanup != nil {
+			funcs++
+		}
+		if funcs == 0 {
 			return nil, fmt.Errorf("step %s at index %d is missing a step function", s.ID, i)
+		}
+		if funcs > 1 {
+			return nil, fmt.Errorf("step %s at index %d has multiple step functions", s.ID, i)
 		}
 
 		seenSteps[s.ID] = struct{}{}
@@ -147,11 +194,15 @@ func RunPipeline(ctx context.Context, steps ...PipelineStep) (*Pipeline, error) 
 
 	for _, w := range steps {
 		go func() {
-			var err error
+			var (
+				err         error
+				cleanupFunc func()
+			)
+
 			if w.ReceivePipelineCancellation {
-				err = w.Func(gracefulCtx)
+				cleanupFunc, err = w.runFunc(gracefulCtx)
 			} else {
-				err = w.Func(hardCtx)
+				cleanupFunc, err = w.runFunc(hardCtx)
 			}
 			if err != nil {
 				err = PipelineStepError{
@@ -159,14 +210,21 @@ func RunPipeline(ctx context.Context, steps ...PipelineStep) (*Pipeline, error) 
 					Err:    err,
 				}
 			}
-			// regardless of what happened, mark the outputs for this
-			// step as done and potentially close them.
-			err = errors.Join(err, outputs.manyDone(w.Outputs))
-			// if either the step, or the output handling failed, close the pipeline.
+
+			// first, emit any shutdown signals if required.
 			if err != nil {
 				slog.Error("pipeline step failed", "step", w.ID, "error", err.Error())
 				gracefulCancel(err)
 			}
+
+			// invoke the cleanupFunc if there is one.
+			if cleanupFunc != nil {
+				slog.Debug("cleaning up pipeline step", "step", w.ID)
+				cleanupFunc()
+			}
+
+			// then, potentially close the outputs.
+			err = errors.Join(err, outputs.manyDone(w.Outputs))
 
 			slog.Debug("pipeline step shut down", "step", w.ID)
 			p.results <- err
@@ -181,6 +239,7 @@ func (p *Pipeline) Close(ctx context.Context) error {
 	var err error
 
 	done := make(chan struct{})
+	defer close(done)
 	go func() {
 		select {
 		case <-ctx.Done():

@@ -234,8 +234,15 @@ func TestPrefetchWithdrawSteps(t *testing.T) {
 			BankBatchFunc: func(ctx context.Context) (*transfer.BankBatch, error) {
 				return transfer.EmptyBankBatch(), nil
 			},
-			MaxParallelBankBatches:         1,
-			MaxExpiryDuration:              32 * time.Hour, // way beyond the 24h nonce age.
+			MaxParallelBankBatches: 1,
+			CacheEvictSignalFunc: func(expiresAt time.Time) <-chan time.Time {
+				ch := make(chan time.Time)
+				go func() {
+					ch <- time.Now()
+					close(ch)
+				}()
+				return ch
+			},
 			PrefetchAmount:                 prefetchVal,
 			InputAccounts:                  inAccounts,
 			InputRequests:                  inPaymentReqs,

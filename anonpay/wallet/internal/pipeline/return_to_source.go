@@ -58,39 +58,37 @@ func NewReturnToSourceSteps(s *ReturnToSourceSteps) []work.PipelineStep {
 	steps.add(work.PipelineStep{
 		ID:      s.ID + ".CombineInputs",
 		Outputs: work.StepOutputs(withdrawables),
-		Func: func(ctx context.Context) error {
-			batches := s.InputBankBatches
-			accounts := s.InputAccounts
+		Func: func() {
+			inBatches := s.InputBankBatches
+			inAccounts := s.InputAccounts
+
 			for {
 				var (
 					w  transfer.Withdrawable
 					ok bool
 				)
 				select {
-				case <-ctx.Done():
-					return ctx.Err()
-				case w, ok = <-batches:
+				case w, ok = <-inBatches:
 					if !ok {
-						batches = nil
+						inBatches = nil
 					}
-				case w, ok = <-accounts:
+				case w, ok = <-inAccounts:
 					if !ok {
-						accounts = nil
+						inAccounts = nil
 					}
 				}
 
-				if batches == nil && accounts == nil {
-					return nil
+				// all inputs closed, early exit.
+				if inBatches == nil && inAccounts == nil {
+					return
 				}
 
+				// one fo the inputs was closed, receive a value next iteration.
 				if !ok {
 					continue
 				}
 
-				err := withdrawables.Send(ctx, w)
-				if err != nil {
-					return fmt.Errorf("failed to send output: %w", err)
-				}
+				withdrawables.SendCh <- w
 			}
 		},
 	})

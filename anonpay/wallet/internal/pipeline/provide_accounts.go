@@ -42,7 +42,7 @@ type ProvideAccountsSteps struct {
 	MaxParallelSourceAccounts    int
 	SourceFunc                   func(ctx context.Context) (*transfer.Source, error)
 	EmptyBankAccountFunc         func(ctx context.Context) (*transfer.Account, error)
-	InputSignal                  <-chan struct{}
+	InputDoneSignal              <-chan struct{}
 	InputAccounts                <-chan *transfer.Account
 	OutputFullAccountsToWithdraw *work.Channel[*transfer.Account]
 	OutputAccountsToSource       *work.Channel[*transfer.Account]
@@ -50,7 +50,7 @@ type ProvideAccountsSteps struct {
 
 func NewProvideAccountsSteps(s *ProvideAccountsSteps) []work.PipelineStep {
 	// verify dev provided inputs to aid with debugging.
-	work.MustHaveInput(s.ID, s.InputSignal)
+	work.MustHaveInput(s.ID, s.InputDoneSignal)
 	work.MustHaveInput(s.ID, s.InputAccounts)
 	work.MustHaveOutput[*transfer.Account](s.ID, s.OutputFullAccountsToWithdraw)
 	work.MustHaveOutput[*transfer.Account](s.ID, s.OutputAccountsToSource)
@@ -61,26 +61,26 @@ func NewProvideAccountsSteps(s *ProvideAccountsSteps) []work.PipelineStep {
 	steps.add(work.PipelineStep{
 		ID:      s.ID + ".ProduceEmptyAccountsUntilClose",
 		Outputs: work.StepOutputs(emptyAccounts),
-		Func: func(ctx context.Context) error {
+		FuncWithError: func(ctx context.Context) error {
 			for {
 				select {
-				case <-ctx.Done():
-					return ctx.Err()
-				case <-s.InputSignal:
-					return nil
+				case _, ok := <-s.InputDoneSignal:
+					if !ok {
+						return nil
+					}
 				default:
 				}
 
 				acc, err := s.EmptyBankAccountFunc(ctx)
 				if err != nil {
-					return work.DropErrPipelineClosed(ctx, err)
+					return err
 				}
 
 				select {
-				case <-ctx.Done():
-					return ctx.Err()
-				case <-s.InputSignal:
-					return nil
+				case _, ok := <-s.InputDoneSignal:
+					if !ok {
+						return nil
+					}
 				case emptyAccounts.SendCh <- acc:
 				}
 			}
@@ -123,101 +123,93 @@ func NewProvideAccountsSteps(s *ProvideAccountsSteps) []work.PipelineStep {
 	steps.add(work.PipelineStep{
 		ID:      s.ID + ".RouteAccounts",
 		Outputs: work.StepOutputs(s.OutputAccountsToSource), // Note: withdrawableAccounts is missing here on purpose, see comment above.
-		Func: func(ctx context.Context) error {
+		Func: func() {
 			// This step accepts three inputs and needs to exit when the closeSignal channel is closed.
 			//
 			// When the close signal is received, this step should immediately close withdrawableAccounts so that
 			// the other pipeline sections can begin shutting down as well.
 			//
 			// After that it will still need to drain both from s.InputAccounts and fullAccountsFromSource by
-			// sending them to s. OutputAccounts.
+			// sending them to s.OutputAccounts.
 			//
 			// closeSignal should be set to nil after it's closed.
-			closeSignal := s.InputSignal
+			closeSignal := s.InputDoneSignal
 
 			// We want to prioritize existing accounts over new accounts pulled from source. Both channels should
 			// be set to nil after they are closed.
-			priority := s.InputAccounts
-			fallback := fullAccountsFromSource.ReceiveCh
-			defer func() {
-				// it could be that we exited due for a different reason than closeSignal being closed.
-				if closeSignal != nil {
-					withdrawableAccounts.Close()
-				}
-			}()
+			inPriority := s.InputAccounts
+			inFallback := fullAccountsFromSource.ReceiveCh
 
 			for {
 				var (
 					acc *transfer.Account
 					ok  bool
 				)
+
 				select {
-				case <-ctx.Done():
-					return ctx.Err()
-				case _, ok := <-closeSignal:
+				// receive either a close signal, or a priority account.
+				case _, ok = <-closeSignal:
 					if !ok {
 						withdrawableAccounts.Close()
 						closeSignal = nil
 					}
-				case acc, ok = <-priority:
+				case acc, ok = <-inPriority:
 					if !ok {
-						priority = nil
+						inPriority = nil
 					}
 				default:
+					// no priority account available, receive either a close signal or any account.
 					select {
-					case <-ctx.Done():
-						return ctx.Err()
-					case _, ok := <-closeSignal:
+					case _, ok = <-closeSignal:
 						if !ok {
 							withdrawableAccounts.Close()
 							closeSignal = nil
 						}
-					case acc, ok = <-priority:
+					case acc, ok = <-inPriority:
 						if !ok {
-							priority = nil
+							inPriority = nil
 						}
-					case acc, ok = <-fallback:
+					case acc, ok = <-inFallback:
 						if !ok {
-							fallback = nil
+							inFallback = nil
 						}
 					}
 				}
 
-				if closeSignal == nil && priority == nil && fallback == nil {
-					return nil
+				// all inputs closed, exit.
+				if closeSignal == nil && inPriority == nil && inFallback == nil {
+					return
 				}
 
+				// an input was closed, continue on to the next iteration.
 				if !ok {
 					continue
 				}
 
-				var err error
 				if closeSignal == nil || acc.Balance() < s.SourceAmount.AmountOrZero() {
-					err = s.OutputAccountsToSource.Send(ctx, acc)
+					s.OutputAccountsToSource.SendCh <- acc
 				} else {
-					err = withdrawableAccounts.Send(ctx, acc)
-				}
-				if err != nil {
-					return fmt.Errorf("failed to send output: %w", err)
+					withdrawableAccounts.SendCh <- acc
 				}
 			}
 		},
 	})
 
+	// without this step, s.OutputFullAccountsToWithdraw would remain open until
+	// the .RouteAccounts step has exited due to the pipeline managed channel.
+	//
+	// This step allows us close it after withdrawableAccounts is closed instead.
 	steps.add(work.PipelineStep{
 		ID:      s.ID + ".EarlyExitFullAcountsToWithdraw",
 		Outputs: work.StepOutputs(s.OutputFullAccountsToWithdraw),
-		Func: func(ctx context.Context) error {
+		Func: func() {
 			for {
-				acc, err := work.ReceiveInput(ctx, withdrawableAccounts.ReceiveCh)
-				if err != nil {
-					return work.DropErrInputClosed(err)
+				acc, ok := <-withdrawableAccounts.ReceiveCh
+				if !ok {
+					return
 				}
 
-				err = s.OutputFullAccountsToWithdraw.Send(ctx, acc)
-				if err != nil {
-					return fmt.Errorf("failed to send output: %w", err)
-				}
+				s.OutputFullAccountsToWithdraw.SendCh <- acc
 			}
 		},
 	})

@@ -59,99 +59,75 @@ func NewCombinedTransferSteps[W transfer.Withdrawable, D transfer.Depositable](s
 	steps.add(work.PipelineStep{
 		ID:      s.ID + ".CreateIntents",
 		Outputs: work.StepOutputs(intents, s.DrainWithdrawables, s.DrainDepositables),
-		Func: func(ctx context.Context) error {
-			var (
-				lastFrom     W
-				fromClosed   bool
-				receivedFrom bool
-				toClosed     bool
-			)
+		// Using FuncWithCleanup because this step can return early due to s.NewIntent
+		// errors. It might require cleanup to drain the input channel.
+		FuncWithCleanup: func(ctx context.Context) (work.CleanupFunc, error) {
+			inFrom := s.InputWithdrawables
+			inTo := s.InputDepositables
+			var unhandledFrom *W
+
+			cleanup := func() {
+				wg := &sync.WaitGroup{}
+				wg.Go(func() {
+					if unhandledFrom != nil && s.DrainWithdrawables != nil {
+						s.DrainWithdrawables.SendCh <- *unhandledFrom
+					}
+					work.DrainInput(inFrom, func(from W) {
+						if s.DrainWithdrawables != nil {
+							s.DrainWithdrawables.SendCh <- from
+						}
+					})
+				})
+
+				wg.Go(func() {
+					work.DrainInput(inTo, func(to D) {
+						if s.DrainDepositables != nil {
+							s.DrainDepositables.SendCh <- to
+						}
+					})
+				})
+
+				wg.Wait()
+			}
+
 			for {
 				var (
 					from W
 					to   D
 					err  error
 				)
-				if s.InputWithdrawables != nil {
-					receivedFrom = false
-					from, err = work.ReceiveInput(ctx, s.InputWithdrawables)
+				unhandledFrom = nil
+				if inFrom != nil {
+					// also exit when the context is cancelled, no need to wait for the intent to reach the transfer step.
+					from, err = work.ReceiveInput(ctx, inFrom)
 					if err != nil {
 						if errors.Is(err, work.ErrInputClosed) {
-							fromClosed = true
+							inFrom = nil
 							break
 						}
-						return err
+						return cleanup, err
 					}
-					lastFrom = from
-					receivedFrom = true
+					unhandledFrom = &from
 				}
 
-				if s.InputDepositables != nil {
-					to, err = work.ReceiveInput(ctx, s.InputDepositables)
+				if inTo != nil {
+					to, err = work.ReceiveInput(ctx, inTo)
 					if err != nil {
 						if errors.Is(err, work.ErrInputClosed) {
-							toClosed = true
+							inTo = nil
 							break
 						}
-						return err
+						return cleanup, err
 					}
 				}
 
 				intent, err := s.NewIntent(ctx, from, to)
 				if err != nil {
-					return fmt.Errorf("failed to create transfer input: %w", err)
+					return cleanup, fmt.Errorf("failed to create transfer input: %w", err)
 				}
-
-				err = intents.Send(ctx, intent)
-				if err != nil {
-					return fmt.Errorf("failed to send transfer: %w", err)
-				}
+				intents.SendCh <- intent
 			}
-
-			var (
-				wg     = &sync.WaitGroup{}
-				drains = make(chan error, 2)
-			)
-
-			if s.DrainWithdrawables != nil && !fromClosed {
-				wg.Go(func() {
-					if receivedFrom {
-						err := s.DrainWithdrawables.Send(ctx, lastFrom)
-						if err != nil {
-							drains <- err
-							return
-						}
-					}
-					for from := range s.InputWithdrawables {
-						err := s.DrainWithdrawables.Send(ctx, from)
-						if err != nil {
-							drains <- err
-							return
-						}
-					}
-				})
-			}
-
-			if s.DrainDepositables != nil && !toClosed {
-				wg.Go(func() {
-					for to := range s.InputDepositables {
-						err := s.DrainDepositables.Send(ctx, to)
-						if err != nil {
-							drains <- err
-							return
-						}
-					}
-				})
-			}
-
-			wg.Wait()
-			close(drains)
-
-			var err error
-			for drainErr := range drains {
-				err = errors.Join(err, drainErr)
-			}
-			return err
+			return cleanup, nil
 		},
 	})
 
@@ -222,25 +198,27 @@ func NewTransferSteps[W transfer.Withdrawable, D transfer.Depositable](s *Transf
 		},
 		Input:  s.Input,
 		Output: results,
+		DrainInputFunc: func(in *transfer.Intent[W, D], jobErr error) {
+			// TODO: Either the transfer for this intent failed, or a
+			// transfer was never attempted due to an earlier failure.
+		},
 	}))
 
 	steps.add(work.PipelineStep{
 		ID:      s.ID + ".FilterNilTransfers",
 		Outputs: work.StepOutputs(s.Output),
-		Func: func(ctx context.Context) error {
+		Func: func() {
 			for {
-				result, err := work.ReceiveInput(ctx, results.ReceiveCh)
-				if err != nil {
-					return work.DropErrInputClosed(err)
+				tsfr, ok := <-results.ReceiveCh
+				if !ok {
+					return
 				}
-				if result == nil || s.Output == nil {
+
+				if tsfr == nil || s.Output == nil {
 					continue
 				}
 
-				err = s.Output.Send(ctx, result)
-				if err != nil {
-					return fmt.Errorf("failed to send output: %w", err)
-				}
+				s.Output.SendCh <- tsfr
 			}
 		},
 	})
@@ -269,28 +247,24 @@ func NewMapTransferStep[W transfer.Withdrawable, D transfer.Depositable](s *MapT
 	return work.PipelineStep{
 		ID:      s.ID,
 		Outputs: work.StepOutputs(s.OutputWithdrawables, s.OutputDepositables),
-		Func: func(ctx context.Context) error {
+		Func: func() {
 			for {
-				t, err := work.ReceiveInput(ctx, s.Input)
-				if err != nil {
-					return work.DropErrInputClosed(err)
+				tsfr, ok := <-s.Input
+				if !ok {
+					break
 				}
 
 				from, to := true, true
 				if s.MapFunc != nil {
-					from, to = s.MapFunc(t)
+					from, to = s.MapFunc(tsfr)
 				}
 
 				if from && s.OutputWithdrawables != nil {
-					err = errors.Join(err, s.OutputWithdrawables.Send(ctx, t.From()))
+					s.OutputWithdrawables.SendCh <- tsfr.From()
 				}
 
 				if to && s.OutputDepositables != nil {
-					err = errors.Join(err, s.OutputDepositables.Send(ctx, t.To()))
-				}
-
-				if err != nil {
-					return fmt.Errorf("failed to output: %w", err)
+					s.OutputDepositables.SendCh <- tsfr.To()
 				}
 			}
 		},

@@ -65,9 +65,24 @@ type DebugConfig struct {
 }
 
 type Wallet struct {
-	closeMu    *sync.RWMutex
-	closed     bool
-	paymentsWG *sync.WaitGroup
+	closeMu     *sync.RWMutex
+	closeCalled bool
+
+	// lifecycleCtx indicates the wallet is open and ready to accept payments.
+	// When this context is done it means that the wallet can't accept payments
+	// anymore due to one of the following reasons:
+	// - [Wallet.Close] has been called and finished.
+	// - [Wallet.Close] has been called and the wallet is in the process of closing.
+	// - The wallet pipeline has encountered an irrecoverable error.
+	lifecycleCtx context.Context
+	// lifecycleCancel initiates closure of the wallet
+	// due to an internal error. The cause of the [lifecycleCtx]
+	// will contain the internal error.
+	lifecycleCancel context.CancelCauseFunc
+
+	openRequestsWG  *sync.WaitGroup
+	openResponsesWG *sync.WaitGroup
+	openPaymentsWG  *sync.WaitGroup
 
 	debugCfg *DebugConfig
 
@@ -159,10 +174,22 @@ func New(cfg Config, payee *anonpay.Payee, bank banking.BlindBankContract, srcSv
 	withdrawals := work.NewChannel[*transfer.PaymentRequest]("wallet.Withdrawals", 0)
 	deposits := work.NewChannel[*transfer.PaymentResult]("wallet.Deposits", 0)
 
+	lifecycleCtx, lifecycleCancel := context.WithCancelCause(context.Background())
+
 	steps := []work.PipelineStep{}
 	steps = append(steps, pipeline.NewRootStep(&pipeline.RootStep{
-		ID:     "root",
-		Output: signal,
+		ID:         "root",
+		DoneOutput: signal,
+		HandleUnrecoverableError: func(err error) {
+			// pipeline is shutting down due to a worker exiting early,
+			// we propagate this error to the lifecycle context.
+
+			// fine to call this after Wallet.Close has already called it,
+			// calling for a second time won't do anything.
+			lifecycleCancel(ClosedError{
+				Err: err,
+			})
+		},
 	}))
 	src := transfer.NewSource(srcSvc, cfg.MaxDelay)
 
@@ -197,9 +224,14 @@ func New(cfg Config, payee *anonpay.Payee, bank banking.BlindBankContract, srcSv
 	}
 
 	return &Wallet{
-		closeMu:    &sync.RWMutex{},
-		closed:     false,
-		paymentsWG: &sync.WaitGroup{},
+		closeMu:         &sync.RWMutex{},
+		closeCalled:     false,
+		lifecycleCtx:    lifecycleCtx,
+		lifecycleCancel: lifecycleCancel,
+
+		openRequestsWG:  &sync.WaitGroup{},
+		openResponsesWG: &sync.WaitGroup{},
+		openPaymentsWG:  &sync.WaitGroup{},
 
 		workPool:       wp,
 		prefetchAmount: cfg.PrefetchAmount,
@@ -233,52 +265,79 @@ func (w *Wallet) BeginPayment(ctx context.Context, amount int64) (Payment, error
 		return nil, fmt.Errorf("wallet does not support ad-hoc withdrawals yet. please withdraw %d or less, got %d", w.prefetchAmount, val.AmountOrZero())
 	}
 
-	// check if the wallet is closed.
-	w.closeMu.RLock()
-	if w.closed {
-		w.closeMu.RUnlock()
-		return nil, errors.New("wallet is closed")
+	// wait for a new transfer request to enter the pipeline.
+	req, err := w.waitForPipelineRequest(ctx, val)
+	if err != nil {
+		return nil, err
 	}
-	w.paymentsWG.Add(1)
-	w.closeMu.RUnlock()
 
-	// enqueue the request so that the pipeline can make deposit into it.
+	// wait for the pipeline to respond with a credit for that request.
+	return w.waitForPipelineResponse(ctx, req)
+}
+
+func (w *Wallet) waitForPipelineRequest(ctx context.Context, val currency.Value) (*transfer.PaymentRequest, error) {
 	req := transfer.NewPaymentRequest(val)
 	timer := time.NewTimer(time.Millisecond)
+	w.openRequestsWG.Add(1)
+	defer w.openRequestsWG.Done()
 	select {
 	case w.requests <- req:
+		// success.
+		return req, nil
 	case <-ctx.Done():
-		w.paymentsWG.Done()
 		return nil, ctx.Err()
+	case <-w.lifecycleCtx.Done():
+		return nil, context.Cause(w.lifecycleCtx)
 	case <-timer.C:
 		slog.Warn("Could not immediately schedule payment. Consider increasing concurrent_requests_target")
 		select {
 		case w.requests <- req:
+			// success.
+			return req, nil
 		case <-ctx.Done():
-			w.paymentsWG.Done()
 			return nil, ctx.Err()
+		case <-w.lifecycleCtx.Done():
+			return nil, context.Cause(w.lifecycleCtx)
 		}
 	}
-
-	// begin a payment for the request. Waits for the request to resolve
-	// or for the context to be cancelled.
-	return w.beginPaymentForRequest(ctx, req)
 }
 
+// Close closes the wallet and returns any errors encountered while closing,
+// or that were encountered internally while the wallet was running.
 func (w *Wallet) Close(ctx context.Context) error {
 	w.closeMu.Lock()
-	if w.closed {
+	if w.closeCalled {
 		w.closeMu.Unlock()
 		return nil
 	}
-	w.closed = true
+	w.closeCalled = true
 	defer w.closeMu.Unlock()
+
 	defer func() {
 		w.workPool.Close()
 	}()
 
-	// wait for withdrawals and deposits to finish.
-	w.paymentsWG.Wait()
+	// might already have been called by the root step error handler,
+	// in which case this has no effect.
+	w.lifecycleCancel(ClosedError{
+		Err: ErrCloseCalled,
+	})
+
+	// wait for open payment requests and responses to be resolved,
+	// need to do this in separate go routines to prevent blocking
+	// if Close is called in the same goroutine as BeginPayment.
+	wg := &sync.WaitGroup{}
+	wg.Go(func() {
+		w.openRequestsWG.Wait()
+	})
+	wg.Go(func() {
+		w.openResponsesWG.Wait()
+	})
+	wg.Go(func() {
+		w.openPaymentsWG.Wait()
+	})
+
+	wg.Wait()
 
 	// close the inputs to the pipeline so it can shut down.
 	close(w.requests)
@@ -289,6 +348,7 @@ func (w *Wallet) Close(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to close pipeline: %w", err)
 	}
+
 	return nil
 }
 

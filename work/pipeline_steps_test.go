@@ -130,11 +130,17 @@ func TestParallelStep(t *testing.T) {
 		ctx, cancel := context.WithCancel(t.Context())
 		done := make(chan error)
 		go func() {
-			done <- step.Func(ctx)
+			cleanup, err := step.FuncWithCleanup(ctx)
+			done <- err
+			cleanup()
+			done <- nil
 		}()
 		cancel()
 		err := <-done
 		require.ErrorIs(t, err, context.Canceled)
+		close(input)
+		err = <-done
+		require.NoError(t, err)
 	})
 
 	t.Run("fail, context cancellation reaches func", func(t *testing.T) {
@@ -169,14 +175,15 @@ func TestParallelStep(t *testing.T) {
 			},
 			Input:  input,
 			Output: output,
-			RemainingInput: func(in int, err error) {
+			DrainInputFunc: func(in int, _ error) {
 				seenSum.Add(int64(in))
 			},
 		})
 
 		done := make(chan error)
 		go func() {
-			err := step.Func(ctx)
+			cleanup, err := step.FuncWithCleanup(ctx)
+			cleanup()
 			err = errors.Join(err, output.Close())
 			done <- err
 		}()
@@ -188,7 +195,7 @@ func TestParallelStep(t *testing.T) {
 		err := <-done
 		require.ErrorIs(t, err, context.Canceled)
 
-		// ensure all values are accounted for.
+		// because the context gets cancelled, we don't fully drain the input.
 		for val := range input {
 			seenSum.Add(int64(val))
 		}
@@ -223,14 +230,15 @@ func TestParallelStep(t *testing.T) {
 			},
 			Input:  input,
 			Output: output,
-			RemainingInput: func(in int, err error) {
+			DrainInputFunc: func(in int, _ error) {
 				seenSum.Add(int64(in))
 			},
 		})
 
 		done := make(chan error)
 		go func() {
-			err := step.Func(t.Context())
+			cleanup, err := step.FuncWithCleanup(t.Context())
+			cleanup()
 			err = errors.Join(err, output.Close())
 			done <- err
 		}()
@@ -241,11 +249,6 @@ func TestParallelStep(t *testing.T) {
 
 		err := <-done
 		require.ErrorIs(t, err, assert.AnError)
-
-		// ensure all values are accounted for.
-		for val := range input {
-			seenSum.Add(int64(val))
-		}
 
 		inputsSum := int64(inputs * (inputs + 1) / 2)
 		require.Equal(t, inputsSum, seenSum.Load())

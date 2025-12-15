@@ -16,7 +16,6 @@ package pipeline
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 
@@ -78,20 +77,17 @@ func NewConsolidateSteps(s *ConsolidateSteps) []work.PipelineStep {
 		steps.add(work.PipelineStep{
 			ID:      s.ID + ".FilterFullAccounts",
 			Outputs: work.StepOutputs(lowAccounts),
-			Func: func(ctx context.Context) error {
+			Func: func() {
 				for {
-					acc, err := work.ReceiveInput(ctx, s.InputAccounts)
-					if err != nil {
-						return work.DropErrInputClosed(err)
+					acc, ok := <-s.InputAccounts
+					if !ok {
+						break
 					}
 
 					if acc.Balance() < s.TargetBalance {
-						err = lowAccounts.Send(ctx, acc)
+						lowAccounts.SendCh <- acc
 					} else {
-						err = s.Output.Send(ctx, acc)
-					}
-					if err != nil {
-						return fmt.Errorf("failed to send output: %w", err)
+						s.Output.SendCh <- acc
 					}
 				}
 			},
@@ -103,14 +99,14 @@ func NewConsolidateSteps(s *ConsolidateSteps) []work.PipelineStep {
 	steps.add(work.PipelineStep{
 		ID:      s.ID + ".CombineConsolidatables",
 		Outputs: work.StepOutputs(consolidatables),
-		Func: func(ctx context.Context) error {
+		Func: func() {
 			// local vars for input channels so we can nil them safely to signal they're done.
-			// any of of these could be nil.
-			bankBatches := s.InputBankBatches
-			var accounts <-chan *transfer.Account
-			payResult := s.InputPaymentResults
+			// any of of these can be nil.
+			inputBankBatches := s.InputBankBatches
+			var inputAccounts <-chan *transfer.Account
+			inputPayResults := s.InputPaymentResults
 			if lowAccounts != nil {
-				accounts = lowAccounts.ReceiveCh
+				inputAccounts = lowAccounts.ReceiveCh
 			}
 
 			for {
@@ -119,25 +115,23 @@ func NewConsolidateSteps(s *ConsolidateSteps) []work.PipelineStep {
 					ok  bool
 				)
 				select {
-				case <-ctx.Done():
-					return ctx.Err()
-				case val, ok = <-bankBatches:
+				case val, ok = <-inputBankBatches:
 					if !ok {
-						bankBatches = nil
+						inputBankBatches = nil
 					}
-				case val, ok = <-accounts:
+				case val, ok = <-inputAccounts:
 					if !ok {
-						accounts = nil
+						inputAccounts = nil
 					}
-				case val, ok = <-payResult:
+				case val, ok = <-inputPayResults:
 					if !ok {
-						payResult = nil
+						inputPayResults = nil
 					}
 				}
 
-				if bankBatches == nil && accounts == nil && payResult == nil {
+				if inputBankBatches == nil && inputAccounts == nil && inputPayResults == nil {
 					// all inputs closed, exit.
-					return nil
+					return
 				}
 
 				if !ok {
@@ -145,10 +139,7 @@ func NewConsolidateSteps(s *ConsolidateSteps) []work.PipelineStep {
 					continue
 				}
 
-				err := consolidatables.Send(ctx, val)
-				if err != nil {
-					return fmt.Errorf("failed to send output: %w", err)
-				}
+				consolidatables.SendCh <- val
 			}
 		},
 	})
@@ -157,18 +148,26 @@ func NewConsolidateSteps(s *ConsolidateSteps) []work.PipelineStep {
 	steps.add(work.PipelineStep{
 		ID:      s.ID + ".CreateIntents",
 		Outputs: work.StepOutputs(intents),
-		Func: func(ctx context.Context) error {
+		// Using FuncWithCleanup because this step can return early due to AccountFunc
+		// errors. It might require cleanup to drain the input channel.
+		FuncWithCleanup: func(ctx context.Context) (work.CleanupFunc, error) {
+			input := consolidatables.ReceiveCh
+			cleanup := work.CleanupFunc(func() {
+				work.DrainInput(input, nil)
+			})
+
 			acc, err := s.AccountFunc(ctx)
 			if err != nil {
-				return fmt.Errorf("failed to create empty bank account: %w", err)
+				return cleanup, fmt.Errorf("failed to create empty bank account: %w", err)
 			}
 
 			virtualBalance := int64(0)
 			lastGroupIndex := 0
 			for {
-				val, err := work.ReceiveInput(ctx, consolidatables.ReceiveCh)
+				// also exit when the context is cancelled, no need to wait for the intent to reach the transfer step.
+				val, err := work.ReceiveInput(ctx, input)
 				if err != nil {
-					return work.DropErrInputClosed(err)
+					return cleanup, work.DropErrInputClosed(err)
 				}
 
 				virtualBalance += val.Balance()
@@ -186,16 +185,13 @@ func NewConsolidateSteps(s *ConsolidateSteps) []work.PipelineStep {
 				}
 
 				// intent to send the full batch to the account.
-				err = intents.Send(ctx, intent)
-				if err != nil {
-					return fmt.Errorf("failed to output transfer: %w", err)
-				}
+				intents.SendCh <- intent
 
 				// check if this was the last duplicate.
 				if lastDupe {
 					acc, err = s.AccountFunc(ctx)
 					if err != nil {
-						return fmt.Errorf("failed to create empty bank account: %w", err)
+						return cleanup, fmt.Errorf("failed to create empty bank account: %w", err)
 					}
 					virtualBalance = 0
 					lastGroupIndex = 0
@@ -229,16 +225,13 @@ func NewConsolidateSteps(s *ConsolidateSteps) []work.PipelineStep {
 	steps.add(work.PipelineStep{
 		ID:      s.ID + ".DedupeAccounts",
 		Outputs: work.StepOutputs(s.Output),
-		Func: func(ctx context.Context) error {
+		Func: func() {
 			// collect repeated resultsByAcc.
 			resultsByAcc := map[*transfer.Account]*transfer.RepResults{}
 			for {
-				tsfr, err := work.ReceiveInput(ctx, transfers.ReceiveCh)
-				if err != nil {
-					if errors.Is(err, work.ErrInputClosed) {
-						break
-					}
-					return err
+				tsfr, ok := <-transfers.ReceiveCh
+				if !ok {
+					break
 				}
 
 				results, ok := resultsByAcc[tsfr.To().D]
@@ -253,23 +246,16 @@ func NewConsolidateSteps(s *ConsolidateSteps) []work.PipelineStep {
 
 				// results are complete. Delete them and send account to output.
 				delete(resultsByAcc, tsfr.To().D)
-				err = s.Output.Send(ctx, tsfr.To().D)
-				if err != nil {
-					return fmt.Errorf("failed to send output: %w", err)
-				}
+				s.Output.SendCh <- tsfr.To().D
 			}
 
 			if len(resultsByAcc) > 0 {
 				for to := range resultsByAcc {
 					// not all accounts will receive their final result, as there's no guarantee
 					// we're receiving enough inputs to fill up accounts.
-					err := s.Output.Send(ctx, to)
-					if err != nil {
-						return fmt.Errorf("failed to send output: %w", err)
-					}
+					s.Output.SendCh <- to
 				}
 			}
-			return nil
 		},
 	})
 

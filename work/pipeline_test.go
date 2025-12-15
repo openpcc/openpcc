@@ -39,7 +39,7 @@ func TestPipelineRun(t *testing.T) {
 		calls := &atomic.Int64{}
 		p, err := work.RunPipeline(t.Context(), work.PipelineStep{
 			ID: "1",
-			Func: func(_ context.Context) error {
+			FuncWithError: func(_ context.Context) error {
 				calls.Add(1)
 				return nil
 			},
@@ -57,7 +57,7 @@ func TestPipelineRun(t *testing.T) {
 		calls := &atomic.Int64{}
 		p, err := work.RunPipeline(t.Context(), work.PipelineStep{
 			ID: "1",
-			Func: func(ctx context.Context) error {
+			FuncWithError: func(ctx context.Context) error {
 				timer := time.NewTimer(10 * time.Millisecond)
 				select {
 				case <-ctx.Done():
@@ -84,7 +84,7 @@ func TestPipelineRun(t *testing.T) {
 		stepCause := make(chan error, 1) // buffer so we don't block in the step.
 		p, err := work.RunPipeline(t.Context(), work.PipelineStep{
 			ID: "1",
-			Func: func(ctx context.Context) error {
+			FuncWithError: func(ctx context.Context) error {
 				calls.Add(1)
 				// wait for the context to be done.
 				<-ctx.Done()
@@ -113,7 +113,7 @@ func TestPipelineRun(t *testing.T) {
 		stepCause := make(chan error)
 		p, err := work.RunPipeline(ctx, work.PipelineStep{
 			ID: "1",
-			Func: func(ctx context.Context) error {
+			FuncWithError: func(ctx context.Context) error {
 				calls.Add(1)
 				// wait for the context to be done.
 				<-ctx.Done()
@@ -139,7 +139,7 @@ func TestPipelineRun(t *testing.T) {
 	t.Run("fail, cancellation of close ctx is received even by non-cancellation receiving steps", func(t *testing.T) {
 		p, err := work.RunPipeline(t.Context(), work.PipelineStep{
 			ID: "1",
-			Func: func(ctx context.Context) error {
+			FuncWithError: func(ctx context.Context) error {
 				<-ctx.Done()
 				return context.Cause(ctx)
 			},
@@ -159,7 +159,7 @@ func TestPipelineRun(t *testing.T) {
 		calls := &atomic.Int64{}
 		p, err := work.RunPipeline(t.Context(), work.PipelineStep{
 			ID: "1",
-			Func: func(_ context.Context) error {
+			FuncWithError: func(_ context.Context) error {
 				calls.Add(1)
 				return assert.AnError
 			},
@@ -187,7 +187,7 @@ func TestPipelineRun(t *testing.T) {
 			work.PipelineStep{
 				ID:                          "1",
 				ReceivePipelineCancellation: true,
-				Func: func(ctx context.Context) error {
+				FuncWithError: func(ctx context.Context) error {
 					w1.Add(1)
 					// wait for the context to be done.
 					<-ctx.Done()
@@ -197,7 +197,7 @@ func TestPipelineRun(t *testing.T) {
 			},
 			work.PipelineStep{
 				ID: "2",
-				Func: func(ctx context.Context) error {
+				FuncWithError: func(ctx context.Context) error {
 					w2.Add(1)
 					return assert.AnError
 				},
@@ -233,21 +233,21 @@ func TestPipelineRun(t *testing.T) {
 			t.Context(),
 			work.PipelineStep{
 				ID: "1",
-				Func: func(_ context.Context) error {
+				FuncWithError: func(_ context.Context) error {
 					w1.Add(1)
 					return nil
 				},
 			},
 			work.PipelineStep{
 				ID: "2",
-				Func: func(_ context.Context) error {
+				FuncWithError: func(_ context.Context) error {
 					w2.Add(1)
 					return nil
 				},
 			},
 			work.PipelineStep{
 				ID: "3",
-				Func: func(_ context.Context) error {
+				FuncWithError: func(_ context.Context) error {
 					w3.Add(1)
 					return nil
 				},
@@ -273,7 +273,7 @@ func TestPipelineRun(t *testing.T) {
 			t.Context(),
 			work.PipelineStep{
 				ID: "producer",
-				Func: func(_ context.Context) error {
+				FuncWithError: func(_ context.Context) error {
 					defer close(producerOut)
 					for i := range 11 {
 						producerOut <- i
@@ -283,7 +283,7 @@ func TestPipelineRun(t *testing.T) {
 			},
 			work.PipelineStep{
 				ID: "doubler",
-				Func: func(_ context.Context) error {
+				FuncWithError: func(_ context.Context) error {
 					defer close(doublerOut)
 					for nr := range producerOut {
 						doublerOut <- nr * 2
@@ -293,7 +293,7 @@ func TestPipelineRun(t *testing.T) {
 			},
 			work.PipelineStep{
 				ID: "collector",
-				Func: func(_ context.Context) error {
+				FuncWithError: func(_ context.Context) error {
 					for nr := range doublerOut {
 						got.Add(int64(nr))
 					}
@@ -320,7 +320,7 @@ func TestPipelineRun(t *testing.T) {
 			Outputs: map[string]io.Closer{
 				"output": output,
 			},
-			Func: func(_ context.Context) error {
+			FuncWithError: func(_ context.Context) error {
 				callsInStep <- output.calls.Load()
 				return nil
 			},
@@ -343,7 +343,7 @@ func TestPipelineRun(t *testing.T) {
 			Outputs: map[string]io.Closer{
 				"output": output,
 			},
-			Func: func(_ context.Context) error {
+			FuncWithError: func(_ context.Context) error {
 				callsInStep <- output.calls.Load()
 				return assert.AnError
 			},
@@ -358,51 +358,6 @@ func TestPipelineRun(t *testing.T) {
 		require.Equal(t, int64(1), output.calls.Load())
 	})
 
-	t.Run("fail, step output gets closed but returns an error, closes the pipeline, other step receives cause", func(t *testing.T) {
-		output := newTestCloser(assert.AnError)
-		stepCause := make(chan error)
-		p, err := work.RunPipeline(
-			t.Context(),
-			work.PipelineStep{
-				ID: "1",
-				Outputs: map[string]io.Closer{
-					"output": output,
-				},
-				Func: func(_ context.Context) error {
-					return nil
-				},
-			},
-			work.PipelineStep{
-				ID:                          "2",
-				ReceivePipelineCancellation: true,
-				Func: func(ctx context.Context) error {
-					<-ctx.Done()
-					stepCause <- context.Cause(ctx)
-					return nil
-				},
-			},
-		)
-		require.NoError(t, err)
-
-		// verify the error w1 got from the context.
-		err = <-stepCause
-		require.ErrorIs(t, err, assert.AnError)
-		require.ErrorAs(t, err, &work.OutputCloseError{
-			OutputID: "output",
-			Err:      assert.AnError,
-		})
-
-		err = p.Close(t.Context())
-		require.ErrorIs(t, err, assert.AnError)
-		require.ErrorAs(t, err, &work.OutputCloseError{
-			OutputID: "output",
-			Err:      assert.AnError,
-		})
-
-		// ensure output was closed
-		require.Equal(t, int64(1), output.calls.Load())
-	})
-
 	t.Run("ok, output gets closed even if other steps are still running", func(t *testing.T) {
 		output := newTestCloser(nil)
 		p, err := work.RunPipeline(
@@ -410,7 +365,7 @@ func TestPipelineRun(t *testing.T) {
 			work.PipelineStep{
 				ID:                          "1",
 				ReceivePipelineCancellation: true,
-				Func: func(ctx context.Context) error {
+				FuncWithError: func(ctx context.Context) error {
 					<-ctx.Done() // wait for the pipeline to be closed.
 					return nil
 				},
@@ -420,7 +375,7 @@ func TestPipelineRun(t *testing.T) {
 				Outputs: map[string]io.Closer{
 					"output": output,
 				},
-				Func: func(ctx context.Context) error {
+				FuncWithError: func(ctx context.Context) error {
 					return nil
 				},
 			},
@@ -448,7 +403,7 @@ func TestPipelineRun(t *testing.T) {
 				Outputs: map[string]io.Closer{
 					"output": output,
 				},
-				Func: func(ctx context.Context) error {
+				FuncWithError: func(ctx context.Context) error {
 					<-closeSignals
 					return nil
 				},
@@ -458,7 +413,7 @@ func TestPipelineRun(t *testing.T) {
 				Outputs: map[string]io.Closer{
 					"output": output,
 				},
-				Func: func(ctx context.Context) error {
+				FuncWithError: func(ctx context.Context) error {
 					<-closeSignals
 					return nil
 				},
@@ -491,7 +446,7 @@ func TestPipelineRun(t *testing.T) {
 			t.Context(),
 			work.PipelineStep{
 				ID: "",
-				Func: func(ctx context.Context) error {
+				FuncWithError: func(ctx context.Context) error {
 					return nil
 				},
 			},
@@ -504,13 +459,13 @@ func TestPipelineRun(t *testing.T) {
 			t.Context(),
 			work.PipelineStep{
 				ID: "step-1",
-				Func: func(ctx context.Context) error {
+				FuncWithError: func(ctx context.Context) error {
 					return nil
 				},
 			},
 			work.PipelineStep{
 				ID: "step-1",
-				Func: func(ctx context.Context) error {
+				FuncWithError: func(ctx context.Context) error {
 					return nil
 				},
 			},
@@ -522,8 +477,8 @@ func TestPipelineRun(t *testing.T) {
 		_, err := work.RunPipeline(
 			t.Context(),
 			work.PipelineStep{
-				ID:   "step",
-				Func: nil,
+				ID:            "step",
+				FuncWithError: nil,
 			},
 		)
 		require.Error(t, err)
@@ -537,7 +492,7 @@ func TestPipelineRun(t *testing.T) {
 				Outputs: map[string]io.Closer{
 					"output": newTestCloser(nil),
 				},
-				Func: func(ctx context.Context) error {
+				FuncWithError: func(ctx context.Context) error {
 					return nil
 				},
 			},
@@ -546,7 +501,7 @@ func TestPipelineRun(t *testing.T) {
 				Outputs: map[string]io.Closer{
 					"output": newTestCloser(nil),
 				},
-				Func: func(ctx context.Context) error {
+				FuncWithError: func(ctx context.Context) error {
 					return nil
 				},
 			},

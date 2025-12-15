@@ -50,74 +50,32 @@ func ReceiveInput[T any](ctx context.Context, c <-chan T) (T, error) {
 	}
 }
 
-type PrioritizedInput[T any] struct {
-	Priority <-chan T
-	Fallback <-chan T
-}
-
-func (p *PrioritizedInput[T]) Receive(ctx context.Context) (T, error) {
-	var (
-		v  T
-		ok bool
-	)
-	for {
-		// select with only priority first.
-		select {
-		case <-ctx.Done():
-			return v, ctx.Err()
-		case v, ok = <-p.Priority:
-			if !ok {
-				p.Priority = nil
-			}
-		default:
-			// select again, but also include fallback.
-			select {
-			case <-ctx.Done():
-				return v, ctx.Err()
-			case v, ok = <-p.Priority:
-				if !ok {
-					p.Priority = nil
-				}
-			case v, ok = <-p.Fallback:
-				if !ok {
-					p.Fallback = nil
-				}
-			}
-		}
-
-		if p.Priority == nil && p.Fallback == nil {
-			// both inputs closed, done.
-			return v, ErrInputClosed
-		}
-
-		if !ok {
-			// didn't receive a value, try again.
-			continue
-		}
-
-		return v, nil
+// DrainInput drains the provided input channel.
+func DrainInput[T any](c <-chan T, rcvFunc func(T)) {
+	if c == nil {
+		return
 	}
-}
 
-// SendOutput is a helper function that either:
-// - Send the value on c.
-// - Returns an error if the context is done before that.
-func SendOutput[T any](ctx context.Context, val T, c chan<- T) error {
-	select {
-	case c <- val:
-		return nil
-	case <-ctx.Done():
-		return ctx.Err()
+	for val := range c {
+		if rcvFunc != nil {
+			rcvFunc(val)
+		}
 	}
 }
 
 // Channel is a helper type that can be used to create a named channel
 // that can be closed by the pipeline when provided as Output on a worker.
+//
+// When using the channel to connect pipeline workers, the general pattern is that
+// sending workers will write to the channel without waiting for contexts to be done.
+//
+// The receiving worker should check if the context is done, and if it is, drain the
+// channels it receives from.
 type Channel[T any] struct {
 	id        string
 	ReceiveCh <-chan T
 	SendCh    chan<- T
-	closeFunc func()
+	ch        chan T
 }
 
 func NewChannel[T any](id string, capacity int) *Channel[T] {
@@ -126,9 +84,7 @@ func NewChannel[T any](id string, capacity int) *Channel[T] {
 		id:        id,
 		ReceiveCh: ch,
 		SendCh:    ch,
-		closeFunc: func() {
-			close(ch)
-		},
+		ch:        ch,
 	}
 }
 
@@ -140,16 +96,12 @@ func (c *Channel[T]) ID() string {
 	return c.id
 }
 
-func (c *Channel[T]) Send(ctx context.Context, val T) error {
-	return SendOutput(ctx, val, c.SendCh)
-}
-
 func (c *Channel[T]) Receive(ctx context.Context) (T, error) {
 	return ReceiveInput(ctx, c.ReceiveCh)
 }
 
 func (c *Channel[T]) Close() error {
-	c.closeFunc()
+	close(c.ch)
 	return nil
 }
 

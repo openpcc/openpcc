@@ -23,37 +23,34 @@ import (
 type RootStep struct {
 	ID string
 	// nolint:revive
-	Output *work.Channel[struct{}]
+	DoneOutput *work.Channel[struct{}]
+	// HandleUnrecoverableError is called when the pipeline closes
+	// due to an error that's not [work.ErrPipelineClosed].
+	//
+	// A context that is done and has [work.ErrPipelineClosed] as a cause
+	// signals a clean exit. During a clean exit, the pipeline will close
+	// input channels to signal that no more work items will be provided.
+	// Workers can then exit in turn.
+	//
+	// A context that is done and has a different cause, means that one of
+	// the downstream workers exited early. This is an unrecoverable error,
+	// as we can't shut down the pipeline cleanly with missing workers.
+	HandleUnrecoverableError func(err error)
 }
 
 func NewRootStep(s *RootStep) work.PipelineStep {
-	work.MustHaveOutput[struct{}](s.ID, s.Output)
+	work.MustHaveOutput[struct{}](s.ID, s.DoneOutput)
 	return work.PipelineStep{
 		ID:                          s.ID,
-		Outputs:                     work.StepOutputs(s.Output),
+		Outputs:                     work.StepOutputs(s.DoneOutput),
 		ReceivePipelineCancellation: true,
-		Func: func(ctx context.Context) error {
+		FuncWithError: func(ctx context.Context) error {
 			<-ctx.Done()
-			return work.DropErrPipelineClosed(ctx, context.Cause(ctx))
-		},
-	}
-}
-
-type DropStep[T any] struct {
-	ID    string
-	Input <-chan T
-}
-
-func NewDropStep[T any](s *DropStep[T]) work.PipelineStep {
-	return work.PipelineStep{
-		ID: s.ID,
-		Func: func(ctx context.Context) error {
-			for {
-				_, err := work.ReceiveInput(ctx, s.Input)
-				if err != nil {
-					return work.DropErrInputClosed(err)
-				}
+			err := work.DropErrPipelineClosed(ctx, context.Cause(ctx))
+			if err != nil && s.HandleUnrecoverableError != nil {
+				s.HandleUnrecoverableError(err)
 			}
+			return err
 		},
 	}
 }

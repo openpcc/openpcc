@@ -74,22 +74,13 @@ func (r *PaymentRequest) deposit(ctx context.Context, transferID []byte, creds .
 	return resp.Err
 }
 
-// PaymentRequestError indicates a failure to resolve a payment request.
-type PaymentRequestError struct {
-	Err error
-}
+// ErrPaymentRequestNoWorker is a sentinel error indicating a payment request failed due to
+// to the relevant worker shutting down.
+var ErrPaymentRequestNoWorker = errors.New("payment request failed, no worker is available")
 
-func (e PaymentRequestError) Unwrap() error {
-	return e.Err
-}
-
-func (e PaymentRequestError) Error() string {
-	return "payment request failed: " + e.Err.Error()
-}
-
-func (r *PaymentRequest) Fail(err error) {
+func (r *PaymentRequest) FailNoWorker() {
 	select {
-	case r.response <- PaymentResponse{Err: PaymentRequestError{Err: err}}:
+	case r.response <- PaymentResponse{Err: ErrPaymentRequestNoWorker}:
 	default:
 		return
 	}

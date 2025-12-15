@@ -29,6 +29,7 @@ import (
 	wtest "github.com/openpcc/openpcc/anonpay/wallet/internal/test"
 	"github.com/openpcc/openpcc/internal/test/anonpaytest"
 	test "github.com/openpcc/openpcc/inttest"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )
@@ -248,6 +249,185 @@ func TestWalletPayments(t *testing.T) {
 			env.consumed = workerConsumed.Load()
 
 			requireEnvironment(t, env, tc.wantWorkerConsumed)
+		})
+	}
+}
+
+func TestWalletErrorHandling(t *testing.T) {
+	requireWalletClosedError := func(t *testing.T, err error) {
+		t.Helper()
+
+		require.ErrorIs(t, err, assert.AnError)
+		closedErr := wallet.ClosedError{}
+		require.ErrorAs(t, err, &closedErr)
+		require.False(t, closedErr.CloseCalled())
+		require.True(t, closedErr.InternalError())
+	}
+
+	serviceErrors := map[string]struct {
+		setupSource            func(src *wtest.FailingSource)
+		setupBank              func(bb *wtest.FailingBlindBank)
+		paymentFunc            func(i int, p wallet.Payment) error
+		requirePaymentFailures bool
+	}{
+		"fail, source.Withdraw never works": {
+			setupSource: func(src *wtest.FailingSource) {
+				src.FailWithdrawAfter = 0
+			},
+			requirePaymentFailures: true,
+		},
+		"fail, source.Withdraw fails after some requests": {
+			setupSource: func(src *wtest.FailingSource) {
+				src.FailWithdrawAfter = 50
+			},
+			requirePaymentFailures: true,
+		},
+		"fail, source.Deposit never works": {
+			setupSource: func(src *wtest.FailingSource) {
+				src.FailDepositAfter = 0
+			},
+			// while this failing could eventually lead to payment failures,
+			// it's difficult to trigger this in tests.
+			requirePaymentFailures: false,
+		},
+		"fail, source.Deposit fails after some requests": {
+			setupSource: func(src *wtest.FailingSource) {
+				src.FailDepositAfter = 50
+			},
+			// while this failing could eventually lead to payment failures,
+			// it's difficult to trigger this in tests.
+			requirePaymentFailures: false,
+		},
+		"fail, bank.WithdrawBatch never works": {
+			setupBank: func(src *wtest.FailingBlindBank) {
+				src.FailWithdrawBatchAfter = 0
+			},
+			requirePaymentFailures: true,
+		},
+		"fail, bank.WithdrawBatch fails after some requests": {
+			setupBank: func(src *wtest.FailingBlindBank) {
+				src.FailWithdrawBatchAfter = 50
+			},
+			requirePaymentFailures: true,
+		},
+		"fail, bank.WithdrawFullUnblinded never works": {
+			setupBank: func(src *wtest.FailingBlindBank) {
+				src.FailWithrawFullUnblindedAfter = 0
+			},
+			// while this failing could eventually lead to payment failures,
+			// it's difficult to trigger this in tests.
+			requirePaymentFailures: false,
+		},
+		"fail, bank.WithdrawFullUnblinded fails after some requests": {
+			setupBank: func(src *wtest.FailingBlindBank) {
+				src.FailWithrawFullUnblindedAfter = 50
+			},
+			// while this failing could eventually lead to payment failures,
+			// it's difficult to trigger this in tests.
+			requirePaymentFailures: false,
+		},
+		"fail, bank.Deposit never works": {
+			setupBank: func(src *wtest.FailingBlindBank) {
+				src.FailDepositAfter = 0
+			},
+			requirePaymentFailures: true,
+		},
+		"fail, bank.Deposit fails after some requests": {
+			setupBank: func(src *wtest.FailingBlindBank) {
+				src.FailDepositAfter = 50
+			},
+			requirePaymentFailures: true,
+		},
+		"fail, bank.Exchange never works": {
+			setupBank: func(src *wtest.FailingBlindBank) {
+				src.FailExchangeAfter = 0
+			},
+			requirePaymentFailures: true,
+		},
+		"fail, bank.Exchange fails after some requests": {
+			setupBank: func(src *wtest.FailingBlindBank) {
+				src.FailExchangeAfter = 50
+			},
+			requirePaymentFailures: true,
+		},
+	}
+
+	for name, tc := range serviceErrors {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			src := wtest.NewFailingSource(t, 10_000_000)
+			if tc.setupSource != nil {
+				tc.setupSource(src)
+			}
+			bb := wtest.NewFailingBlindBank(t)
+			if tc.setupBank != nil {
+				tc.setupBank(bb)
+			}
+
+			payee := anonpaytest.MustNewPayee()
+
+			// setup the wallet
+			cfg := wallet.Config{
+				SourceAmount:   100,
+				PrefetchAmount: 10,
+				MaxParallel:    2,
+				MaxDelay:       1 * time.Millisecond,
+			}
+			w, err := wallet.New(cfg, payee, bb, src)
+			require.NoError(t, err)
+
+			// bit of a hack, but we need to wait for the first wallet delays to pass
+			time.Sleep(time.Millisecond * 100)
+
+			t.Cleanup(func() {
+				// use a new context because t.Context provided will have been cancelled by now.
+				ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+				defer cancel()
+
+				err = w.Close(ctx)
+				// ensure the root error is included as part of this output.
+				require.ErrorIs(t, err, assert.AnError)
+			})
+
+			paymentFunc := func(i int, p wallet.Payment) error {
+				switch i % 3 {
+				case 1:
+					return p.Success(nil)
+				case 2:
+					value := test.Must(currency.Exact(cfg.PrefetchAmount / 2))
+					cred := anonpaytest.MustUnblindCredit(t.Context(), value)
+					return p.Success(cred)
+				default:
+					return p.Cancel()
+				}
+			}
+
+			if tc.paymentFunc != nil {
+				paymentFunc = tc.paymentFunc
+			}
+
+			failedAPayment := false
+			for i := range 1000 {
+				payment, err := w.BeginPayment(t.Context(), cfg.PrefetchAmount)
+				if err == nil {
+					err = paymentFunc(i, payment)
+				}
+
+				// err != nil because not all payments will necessary fail,
+				// we just want at least one of them to fail.
+				if err != nil {
+					requireWalletClosedError(t, err)
+					failedAPayment = true
+					break
+				}
+
+				require.NoError(t, err)
+			}
+
+			if tc.requirePaymentFailures {
+				require.True(t, failedAPayment)
+			}
 		})
 	}
 

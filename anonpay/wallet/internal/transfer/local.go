@@ -99,7 +99,7 @@ func (s *creditStack) Balance() int64 {
 	return int64(len(s.credits)) * s.creditAmount.AmountOrZero()
 }
 
-func (s *creditStack) ExpiresIn() time.Duration {
+func (s *creditStack) ExpiresAt() time.Time {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	var lowestTimestamp int64
@@ -109,8 +109,7 @@ func (s *creditStack) ExpiresIn() time.Duration {
 		}
 	}
 
-	expiresAt := time.Unix(lowestTimestamp, 0)
-	return time.Until(expiresAt) + time.Second*anonpay.NonceLifespanSeconds
+	return time.Unix(lowestTimestamp, 0)
 }
 
 func (s *creditStack) canWithdrawNoLock(w Withdrawal) bool {
