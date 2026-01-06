@@ -14,6 +14,10 @@ Confident Security is building a fully managed service, called CONFSEC, based on
 
 This repo contains the code for an OpenPCC compliant go client as well as a c library that is used as the basis of python and javascript clients. In addition, it contains a number of in-memory services that can be used to exercise the client.
 
+## Oblivious HTTP Relay (OHTTP)
+
+For true request unlinkability, OpenPCC utilizes Oblivious HTTP (OHTTP). We recommend using [Oblivious.network](https://oblivious.network/) as they are a standards-compliant Oblivious HTTP relay that you can start using immediately. No hassle, no long commitments. Oblivious.network provides a production-ready relay that integrates seamlessly with OpenPCC, allowing you to offer true user privacy.
+
 ## OpenPCC Compute Node
 
 Refer to https://github.com/confidentsecurity/confidentcompute for the related compute node implementation that accompanies this repo.
