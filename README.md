@@ -16,7 +16,7 @@ This repo contains the code for an OpenPCC compliant go client as well as a c li
 
 ## Oblivious HTTP Relay (OHTTP)
 
-For true request unlinkability, OpenPCC utilizes Oblivious HTTP (OHTTP). We recommend using [Oblivious.network](https://oblivious.network/) as they are a standards-compliant Oblivious HTTP relay that you can start using immediately. No hassle, no long commitments. Oblivious.network provides a production-ready relay that integrates seamlessly with OpenPCC, allowing you to offer true user privacy.
+To ensure compute providers cannot learn about individual user actions, OpenPCC uses Oblivious HTTP (OHTTP). OpenPCC deployments are expected to operate an OHTTP Gateway and configure clients use an OHTTP Relay, operated by a third party, to reach the Gateway. At present, we recommend [Oblivious.network](https://oblivious.network/) as the only OHTTP Relay service that is usable immediately upon signup.
 
 ## OpenPCC Compute Node
 
