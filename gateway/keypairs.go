@@ -119,13 +119,12 @@ func (kps KeyPairs) FindSecretKey(ctx context.Context, header twoway.RequestHead
 
 func generateKeyPairs(seeds [][]byte) (KeyPairs, error) {
 	if len(seeds) > math.MaxUint8 {
-		return nil, fmt.Errorf("can at most generate %d keypairs, got %d seeds", math.MaxInt8, len(seeds))
+		return nil, fmt.Errorf("can at most generate %d keypairs, got %d seeds", math.MaxUint8, len(seeds))
 	}
-	seedsLen := byte(len(seeds))
 
 	kps := make(KeyPairs, 0, len(seeds))
-	for i := range seedsLen {
-		kps = append(kps, generateKeyPair(i, seeds[0], time.Now(), time.Now().AddDate(1, 0, 0)))
+	for i := range seeds {
+		kps = append(kps, generateKeyPair(byte(i), seeds[i], time.Now(), time.Now().AddDate(1, 0, 0)))
 	}
 
 	return kps, nil
